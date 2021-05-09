@@ -183,7 +183,7 @@ public abstract class UFileTest {
 
     @Test
     public void testMkdir() {
-        UFile folders = root.goTo("mkdirs/mkdirs2");
+        UFile folders = root.goTo("mkdir/mkdir2");
         assertThat(folders.mkdir()).isFalse();
         assertThat(folders.exists()).isFalse();
     }
