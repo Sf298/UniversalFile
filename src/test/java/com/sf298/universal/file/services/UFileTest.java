@@ -1,8 +1,6 @@
 package com.sf298.universal.file.services;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -15,9 +13,10 @@ import static java.util.Objects.isNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public abstract class UFileTest {
 
-    private final Random rand;
+    private static final Random rand = new Random();
     private final UFile root;
     private final String file1 = "File1.txt";
     private final String file111;
@@ -32,23 +31,24 @@ public abstract class UFileTest {
 
     public UFileTest(UFile root) {
         this.root = root;
-        this.uFile1 = root.goTo(file1);
 
         this.file111 = "folder1"+root.getFileSep()+"folder11"+root.getFileSep()+"File1.txt";
         this.folder1 = "folder1";
         this.folder11 = "folder1"+root.getFileSep()+"folder11";
         this.folder111 = "folder1"+root.getFileSep()+"folder11"+root.getFileSep()+"folder111";
 
+        this.uFile1 = root.goTo(file1);
         this.uFile111 = root.goTo(file111);
         this.uFolder1 = root.goTo(folder1);
         this.uFolder11 = root.goTo(folder11);
         this.uFolder111 = root.goTo(folder111);
-
-        this.rand = new Random();
     }
 
     @BeforeEach
     public void setup() {
+        if (!root.exists()) {
+            root.mkdirs();
+        }
         Arrays.stream(root.listFiles())
                 .forEach(uf -> uf.delete(true));
         uFile1.createNewFile();
@@ -62,6 +62,18 @@ public abstract class UFileTest {
         uFile1.close();
         uFolder1.close();
         uFolder11.close();
+        Arrays.stream(root.listFiles())
+                .forEach(uf -> uf.delete(true));
+    }
+
+
+    @Test
+    @Order(1)
+    public void testExists() {
+        assertThat(uFile1.exists()).isTrue();
+
+        UFile rand = root.goTo("mkdirs/noExist.txt");
+        assertThat(rand.exists()).isFalse();
     }
 
 
@@ -104,14 +116,6 @@ public abstract class UFileTest {
         assertThat(uFile1.getPath()).isEqualTo(expected);
     }
 
-
-    @Test
-    public void testExists() {
-        assertThat(uFile1.exists()).isTrue();
-
-        UFile rand = root.goTo("mkdirs/noExist.txt");
-        assertThat(rand.exists()).isFalse();
-    }
 
     @Test
     public void testIsDirectory() {

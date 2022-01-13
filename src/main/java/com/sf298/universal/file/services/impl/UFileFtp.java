@@ -1,6 +1,6 @@
 package com.sf298.universal.file.services.impl;
 
-import com.sf298.universal.file.model.Connection;
+import com.sf298.universal.file.model.ConnectionDetails;
 import com.sf298.universal.file.services.UFile;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.net.ftp.FTPClient;
@@ -13,8 +13,9 @@ import java.io.OutputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
-import static com.sf298.universal.file.model.ConnectionParams.*;
+import static com.sf298.universal.file.model.ConnectionParam.*;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 import static org.apache.commons.net.ftp.FTPReply.*;
@@ -29,29 +30,29 @@ public class UFileFtp extends UFile {
     /**
      * The cache of clients {@link FTPClient}. Reduces overhead of new connections.
      */
-    private static final Map<Pair<Connection, String>, FTPClient> ftpConnections = new HashMap<>();
+    private static final Map<Pair<ConnectionDetails, String>, FTPClient> ftpConnections = new ConcurrentHashMap<>();
 
     private final String path;
-    private final Connection login;
+    private final ConnectionDetails login;
 
     /**
      * Creates a new {@link UFile} located at "/".
-     * @param login The {@link Connection} configuration to connect to the FTP server.<br>
+     * @param login The {@link ConnectionDetails} configuration to connect to the FTP server.<br>
      *              Required: HOST, USERNAME, PASSWORD<br>
      *              Optional: PORT
      */
-    public UFileFtp(Connection login) {
+    public UFileFtp(ConnectionDetails login) {
         this(login, "/");
     }
 
     /**
      * Creates a new {@link UFile} located at the given path.
-     * @param login The {@link Connection} configuration to connect to the FTP server.<br>
+     * @param login The {@link ConnectionDetails} configuration to connect to the FTP server.<br>
      *              Required: HOST, USERNAME, PASSWORD<br>
      *              Optional: PORT
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
-    public UFileFtp(Connection login, String path) {
+    public UFileFtp(ConnectionDetails login, String path) {
         this.path = (!path.equals(getFileSep()) && path.endsWith(getFileSep())) ? path.substring(0, path.length() - 1) : path;
         if (!this.path.matches("([A-Z]:[\\\\/]|/).*")) {
             throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should be like 'C:\\' or '/'.");
@@ -61,7 +62,7 @@ public class UFileFtp extends UFile {
 
     /**
      * Creates a new {@link UFile} located at the given path.
-     * @param uFile The {@link UFile} to copy the {@link Connection} configuration from.
+     * @param uFile The {@link UFile} to copy the {@link ConnectionDetails} configuration from.
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
     private UFileFtp(UFileFtp uFile, String path) {
@@ -140,6 +141,7 @@ public class UFileFtp extends UFile {
         }
 
         try {
+            getParentUFile().mkdirs();
             OutputStream stream = write();
             stream.close();
             writeClose();
@@ -169,7 +171,11 @@ public class UFileFtp extends UFile {
     public String[] list() {
         try {
             return Arrays.stream(getClient().listNames(path))
-                    .map(f -> f.startsWith(getFileSep()) ? f.substring(1) : f)
+                    .map(f -> {
+                        int index = f.lastIndexOf("/");
+                        return index==-1 ? f : f.substring(index+1);
+                    })
+                    .filter(p -> !p.equals(".") && !p.equals(".."))
                     .toArray(String[]::new);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -181,6 +187,7 @@ public class UFileFtp extends UFile {
         try {
             return Arrays.stream(getClient().listFiles(path))
                     .map(this::toUFile)
+                    .filter(uf -> !uf.getPath().endsWith(".") && !uf.getPath().endsWith(".."))
                     .toArray(UFile[]::new);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -202,6 +209,10 @@ public class UFileFtp extends UFile {
     @Override
     public boolean mkdirs() {
         try {
+            UFile parent = getParentUFile();
+            if (!parent.exists()) {
+                parent.mkdirs();
+            }
             return getClient().makeDirectory(path);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -272,7 +283,9 @@ public class UFileFtp extends UFile {
             if(client.isConnected()) {
                 try {
                     client.disconnect();
-                } catch(IOException ignored) {}
+                } catch(IOException ignored) {
+                    ignored.printStackTrace();
+                }
             }
         }
         removeClient();
@@ -295,6 +308,9 @@ public class UFileFtp extends UFile {
     public UFile goTo(String path) {
         return new UFileFtp(this, join(this.path, path, getFileSep()));
     }
+
+    @Override
+    public void clearCache() {}
 
     @Override
     public String toString() {
@@ -346,7 +362,7 @@ public class UFileFtp extends UFile {
      * @return The {@link FTPClient}.
      */
     private FTPClient getClient(String kind) {
-        Pair<Connection, String> key = Pair.of(login, kind);
+        Pair<ConnectionDetails, String> key = Pair.of(login, kind);
         var client = ftpConnections.get(key);
 
         if(isNull(client) || !client.isConnected()) {
@@ -377,6 +393,7 @@ public class UFileFtp extends UFile {
                     }
                 }
             } catch(IOException e) {
+                e.printStackTrace();
                 if(client.isConnected()) {
                     try {
                         client.disconnect();
@@ -394,7 +411,7 @@ public class UFileFtp extends UFile {
      * Gets a default {@link FTPClient} for this {@link UFile}. Creates and connects if required.
      * @return The {@link FTPClient}.
      */
-    private FTPClient getClient() {
+    public FTPClient getClient() {
         return getClient("");
     }
 
@@ -403,7 +420,14 @@ public class UFileFtp extends UFile {
      * @param kind The specific version of the client. Allows for multiple connections to a single server to be maintained.
      */
     private void removeClient(String kind) {
-        ftpConnections.remove(Pair.of(login, kind));
+        Pair<ConnectionDetails, String> key = Pair.of(login, kind);
+
+        try {
+            ftpConnections.get(key).disconnect();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        ftpConnections.remove(key);
     }
 
     /**

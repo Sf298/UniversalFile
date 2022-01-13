@@ -277,6 +277,9 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
+    public void clearCache() {}
+
+    @Override
     public String toString() {
         return file.toString();
     }

@@ -448,6 +448,11 @@ public abstract class UFile {
     public abstract UFile goTo(String path);
 
     /**
+     * Clears any caching used in this {@link UFile}.
+     */
+    public abstract void clearCache();
+
+    /**
      * Joins a parent and a child pathname with the given <code>fileSep</code>.<br>
      * Checks if the parent/child start/ends with the given <code>fileSep</code> and ensures they are joined by only one <code>fileSep</code>.
      * @param parent The parent pathname.
