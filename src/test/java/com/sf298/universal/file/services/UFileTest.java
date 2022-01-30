@@ -4,10 +4,7 @@ import org.junit.jupiter.api.*;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Random;
-import java.util.Scanner;
+import java.util.*;
 
 import static java.util.Objects.isNull;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +43,7 @@ public abstract class UFileTest {
 
     @BeforeEach
     public void setup() {
-        if (!root.exists()) {
+        if (!root.exists().isSuccessful()) {
             root.mkdirs();
         }
         Arrays.stream(root.listFiles())
@@ -70,10 +67,10 @@ public abstract class UFileTest {
     @Test
     @Order(1)
     public void testExists() {
-        assertThat(uFile1.exists()).isTrue();
+        assertThat(uFile1.exists().isSuccessful()).isTrue();
 
         UFile rand = root.goTo("mkdirs/noExist.txt");
-        assertThat(rand.exists()).isFalse();
+        assertThat(rand.exists().isSuccessful()).isFalse();
     }
 
 
@@ -119,16 +116,16 @@ public abstract class UFileTest {
 
     @Test
     public void testIsDirectory() {
-        assertThat(uFile1.isDirectory()).isFalse();
-        assertThat(uFolder1.isDirectory()).isTrue();
-        assertThat(uFolder11.isDirectory()).isTrue();
+        assertThat(uFile1.isDirectory().isSuccessful()).isFalse();
+        assertThat(uFolder1.isDirectory().isSuccessful()).isTrue();
+        assertThat(uFolder11.isDirectory().isSuccessful()).isTrue();
     }
 
     @Test
     public void testIsFile() {
-        assertThat(uFile1.isFile()).isTrue();
-        assertThat(uFolder1.isFile()).isFalse();
-        assertThat(uFolder11.isFile()).isFalse();
+        assertThat(uFile1.isFile().isSuccessful()).isTrue();
+        assertThat(uFolder1.isFile().isSuccessful()).isFalse();
+        assertThat(uFolder11.isFile().isSuccessful()).isFalse();
     }
 
     @Test
@@ -140,19 +137,19 @@ public abstract class UFileTest {
     @Test
     public void testCreateNewFile() {
         UFile f = root.goTo("createNewFile.txt");
-        assertThat(f.exists()).isFalse();
+        assertThat(f.exists().isSuccessful()).isFalse();
         assertThat(f.createNewFile()).isTrue();
-        assertThat(f.exists()).isTrue();
+        assertThat(f.exists().isSuccessful()).isTrue();
         assertThat(f.createNewFile()).isFalse();
     }
 
     @Test
     public void testDelete() {
         assertThat(uFolder1.delete(false)).isFalse();
-        assertThat(uFolder1.exists()).isTrue();
+        assertThat(uFolder1.exists().isSuccessful()).isTrue();
 
         assertThat(uFolder1.delete(true)).isTrue();
-        assertThat(uFolder1.exists()).isFalse();
+        assertThat(uFolder1.exists().isSuccessful()).isFalse();
     }
 
     @Test
@@ -188,15 +185,15 @@ public abstract class UFileTest {
     @Test
     public void testMkdir() {
         UFile folders = root.goTo("mkdir/mkdir2");
-        assertThat(folders.mkdir()).isFalse();
-        assertThat(folders.exists()).isFalse();
+        assertThat(folders.mkdir().getResult()).isFalse();
+        assertThat(folders.exists().isSuccessful()).isFalse();
     }
 
     @Test
     public void testMkdirs() {
         UFile folders = root.goTo("mkdirs/mkdirs2");
-        assertThat(folders.mkdirs()).isTrue();
-        assertThat(folders.exists()).isTrue();
+        assertThat(folders.mkdirs().getResult()).isTrue();
+        assertThat(folders.exists().isSuccessful()).isTrue();
     }
 
     @Test
@@ -247,11 +244,11 @@ public abstract class UFileTest {
         UFile dest2 = root.goTo("folder1/file1.txt");
 
         assertThatThrownBy(() -> uFile1.copyTo(dest1));
-        assertThat(dest1.exists()).isFalse();
+        assertThat(dest1.exists().isSuccessful()).isFalse();
 
         uFile1.copyTo(dest2);
-        assertThat(dest2.exists()).isTrue();
-        assertThat(uFile1.exists()).isTrue();
+        assertThat(dest2.exists().isSuccessful()).isTrue();
+        assertThat(uFile1.exists().isSuccessful()).isTrue();
 
         Scanner s1 = new Scanner(dest2.read()).useDelimiter("\\A");
         String result1 = s1.hasNext() ? s1.next() : "";
@@ -272,11 +269,11 @@ public abstract class UFileTest {
         UFile dest2 = root.goTo("folder1/file1.txt");
 
         assertThatThrownBy(() -> uFile1.moveTo(dest1));
-        assertThat(dest1.exists()).isFalse();
+        assertThat(dest1.exists().isSuccessful()).isFalse();
 
         uFile1.moveTo(dest2);
-        assertThat(dest2.exists()).isTrue();
-        assertThat(uFile1.exists()).isFalse();
+        assertThat(dest2.exists().isSuccessful()).isTrue();
+        assertThat(uFile1.exists().isSuccessful()).isFalse();
 
         Scanner s1 = new Scanner(dest2.read()).useDelimiter("\\A");
         String result1 = s1.hasNext() ? s1.next() : "";

@@ -1,6 +1,7 @@
 package com.sf298.universal.file.services.impl;
 
 import com.sf298.universal.file.model.ConnectionDetails;
+import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.net.ftp.FTPClient;
@@ -99,20 +100,24 @@ public class UFileFtp extends UFile {
 
 
     @Override
-    public boolean exists() {
-        return path.equals(getFileSep()) || nonNull(asFTPFile());
+    public UFExistsResult exists() {
+        return new UFExistsResult(() -> path.equals(getFileSep()) || nonNull(asFTPFile()));
     }
 
     @Override
-    public boolean isDirectory() {
-        FTPFile sftpFile = asFTPFile();
-        return nonNull(sftpFile) && sftpFile.isDirectory();
+    public UFIsDirectoryResult isDirectory() {
+        return new UFIsDirectoryResult(() -> {
+            FTPFile sftpFile = asFTPFile();
+            return nonNull(sftpFile) && sftpFile.isDirectory();
+        });
     }
 
     @Override
-    public boolean isFile() {
-        FTPFile sftpFile = asFTPFile();
-        return nonNull(sftpFile) && sftpFile.isFile();
+    public UFIsFileResult isFile() {
+        return new UFIsFileResult(() -> {
+            FTPFile sftpFile = asFTPFile();
+            return nonNull(sftpFile) && sftpFile.isFile();
+        });
     }
 
     @Override
@@ -126,17 +131,18 @@ public class UFileFtp extends UFile {
 
     @Override
     public long length() {
-        FTPFile sftpFile = asFTPFile();
+        /*FTPFile sftpFile = asFTPFile();
         if(isNull(sftpFile)) {
             throw new RuntimeException("Unable to find file: " + path);
         }
-        return sftpFile.getSize();
+        return sftpFile.getSize();*/
+        return -1;
     }
 
 
     @Override
     public boolean createNewFile() {
-        if (exists()) {
+        if (exists().isSuccessful()) {
             return false;
         }
 
@@ -152,7 +158,7 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public boolean delete(boolean recursive) {
+    public boolean delete(boolean recursive) {/*
         try {
             if (isDirectory()) {
                 if (recursive) {
@@ -164,7 +170,8 @@ public class UFileFtp extends UFile {
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }
+        }*/
+        return false;
     }
 
     @Override
@@ -195,28 +202,24 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public boolean mkdir() {
-        try {
-            if (!getParentUFile().exists()) {
+    public UFMkdirResult mkdir() {
+        return new UFMkdirResult(() -> {
+            if (!getParentUFile().exists().isSuccessful()) {
                 return false;
             }
             return getClient().makeDirectory(path);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        });
     }
 
     @Override
-    public boolean mkdirs() {
-        try {
+    public UFMkdirsResult mkdirs() {
+        return new UFMkdirsResult(() -> {
             UFile parent = getParentUFile();
-            if (!parent.exists()) {
+            if (!parent.exists().isSuccessful()) {
                 parent.mkdirs();
             }
             return getClient().makeDirectory(path);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        });
     }
 
     @Override
@@ -346,14 +349,10 @@ public class UFileFtp extends UFile {
      * Gets the existing {@link FTPFile} from this {@link UFile}.
      * @return The retrieved {@link FTPFile} or null if not found.
      */
-    private FTPFile asFTPFile() {
-        try {
-            return Arrays.stream(getClient().listFiles(getParent()))
-                    .filter(ftp -> path.endsWith(ftp.getName()))
-                    .findFirst().orElse(null);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    private FTPFile asFTPFile() throws IOException {
+        return Arrays.stream(getClient().listFiles(getParent()))
+                .filter(ftp -> path.endsWith(ftp.getName()))
+                .findFirst().orElse(null);
     }
 
     /**

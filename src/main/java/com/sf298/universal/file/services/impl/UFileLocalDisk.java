@@ -1,5 +1,6 @@
 package com.sf298.universal.file.services.impl;
 
+import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
 
 import java.io.*;
@@ -161,18 +162,18 @@ public class UFileLocalDisk extends UFile {
 
 
     @Override
-    public boolean exists() {
-        return file.exists();
+    public UFExistsResult exists() {
+        return new UFExistsResult(file::exists);
     }
 
     @Override
-    public boolean isDirectory() {
-        return file.isDirectory();
+    public UFIsDirectoryResult isDirectory() {
+        return new UFIsDirectoryResult(file::isDirectory);
     }
 
     @Override
-    public boolean isFile() {
-        return file.isFile();
+    public UFIsFileResult isFile() {
+        return new UFIsFileResult(file::isFile);
     }
 
     @Override
@@ -197,7 +198,7 @@ public class UFileLocalDisk extends UFile {
 
     @Override
     public boolean delete(boolean recursive) {
-        if (isDirectory() && recursive) {
+        if (recursive && isDirectory().isSuccessful()) {
             Arrays.stream(listFiles()).forEach(uf -> uf.delete(true));
         }
         return file.delete();
@@ -216,13 +217,13 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
-    public boolean mkdir() {
-        return file.mkdir();
+    public UFMkdirResult mkdir() {
+        return new UFMkdirResult(file::mkdir);
     }
 
     @Override
-    public boolean mkdirs() {
-        return file.mkdirs();
+    public UFMkdirsResult mkdirs() {
+        return new UFMkdirsResult(file::mkdirs);
     }
 
     @Override

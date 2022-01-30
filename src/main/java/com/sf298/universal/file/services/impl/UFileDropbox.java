@@ -2,10 +2,10 @@ package com.sf298.universal.file.services.impl;
 
 import com.dropbox.core.DbxException;
 import com.dropbox.core.DbxRequestConfig;
-import com.dropbox.core.util.IOUtil;
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.*;
 import com.sf298.universal.file.model.ConnectionDetails;
+import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
 
 import java.io.IOException;
@@ -74,6 +74,20 @@ public class UFileDropbox extends UFile {
         this.path = metadata.getPathLower();
     }
 
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public DbxClientV2 getClient() {
+        DbxClientV2 client = clients.get(accessToken);
+        if (isNull(client)) {
+            DbxRequestConfig config = DbxRequestConfig.newBuilder("UFile/testing").build();
+            client = new DbxClientV2(config, accessToken);
+            clients.put(accessToken, client);
+        }
+        return client;
+    }
+
     @Override
     public String getFileSep() {
         return "/";
@@ -103,27 +117,41 @@ public class UFileDropbox extends UFile {
 
 
     @Override
-    public boolean exists() {
-        if (path.equals(getFileSep())) return true;
-        populateMetadataCache();
-        return nonNull(metadataCache);
+    public UFExistsResult exists() {
+        if (path.equals(getFileSep()))
+            return new UFExistsResult(() -> true);
+
+        return new UFExistsResult(() -> {
+            populateMetadataCache();
+            return nonNull(metadataCache);
+        });
     }
 
     @Override
-    public boolean isDirectory() {
-        // Calling exists also ensures the cache is populated
-        return exists() && metadataCache instanceof FolderMetadata;
+    public UFIsDirectoryResult isDirectory() {
+        if (path.equals(getFileSep()))
+            return new UFIsDirectoryResult(() -> true);
+
+        return new UFIsDirectoryResult(() -> {
+            populateMetadataCache();
+            return nonNull(metadataCache) && metadataCache instanceof FolderMetadata;
+        });
     }
 
     @Override
-    public boolean isFile() {
-        // Calling exists also ensures the cache is populated
-        return exists() && metadataCache instanceof FileMetadata;
+    public UFIsFileResult isFile() {
+        if (path.equals(getFileSep()))
+            return new UFIsFileResult(() -> false);
+
+        return new UFIsFileResult(() -> {
+            populateMetadataCache();
+            return nonNull(metadataCache) && metadataCache instanceof FileMetadata;
+        });
     }
 
     @Override
     public Date lastModified() {
-        populateMetadataCache();
+        //populateMetadataCache();
         if (metadataCache instanceof FileMetadata) {
             return ((FileMetadata) metadataCache).getClientModified();
         }
@@ -132,7 +160,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public long length() {
-        populateMetadataCache();
+        //populateMetadataCache();
         if (metadataCache instanceof FileMetadata) {
             return ((FileMetadata) metadataCache).getSize();
         }
@@ -142,7 +170,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public boolean createNewFile() {
-        if (exists()) {
+        if (exists().isSuccessful()) {
             return false;
         }
 
@@ -202,25 +230,20 @@ public class UFileDropbox extends UFile {
     }
 
     @Override
-    public boolean mkdir() {
-        return getParentUFile().exists() && mkdirs();
+    public UFMkdirResult mkdir() {
+        return new UFMkdirResult(() -> false); //getParentUFile().exists() && mkdirs();
     }
 
     @Override
-    public boolean mkdirs() {
+    public UFMkdirsResult mkdirs() {
         if (path.equals(getFileSep())) {
-            return false;
+            return new UFMkdirsResult(() -> false);
         }
 
-        try {
+        return new UFMkdirsResult(() -> {
             CreateFolderResult result = getClient().files().createFolderV2(path);
-            if (nonNull(result) && nonNull(result.getMetadata())) {
-                return true;
-            }
-        } catch (DbxException e) {
-            e.printStackTrace();
-        }
-        return false;
+            return nonNull(result) && nonNull(result.getMetadata());
+        });
     }
 
     @Override
@@ -314,17 +337,7 @@ public class UFileDropbox extends UFile {
         metadataCache = null;
     }
 
-    private DbxClientV2 getClient() {
-        DbxClientV2 client = clients.get(accessToken);
-        if (isNull(client)) {
-            DbxRequestConfig config = DbxRequestConfig.newBuilder("UFile/testing").build();
-            client = new DbxClientV2(config, accessToken);
-            clients.put(accessToken, client);
-        }
-        return client;
-    }
-
-    private void populateMetadataCache() {
+    private void populateMetadataCache() throws DbxException {
         if (isNull(metadataCache)) {
             try {
                 metadataCache = getClient().files().getMetadata(path);
@@ -332,7 +345,7 @@ public class UFileDropbox extends UFile {
                 // file doesnt exist, do nothing
             } catch (DbxException e) {
                 e.printStackTrace();
-                throw new RuntimeException(e);
+                throw e;
             }
         }
     }

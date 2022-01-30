@@ -2,11 +2,11 @@ package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.UFileFilter;
 import com.sf298.universal.file.model.UFilenameFilter;
+import com.sf298.universal.file.model.responses.*;
 
 import java.io.*;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Date;
+import java.util.*;
 
 import static java.util.Objects.isNull;
 
@@ -66,19 +66,19 @@ public abstract class UFile {
      * Checks if this file exists.
      * @return Returns <code>true</code> if the file exists, otherwise <code>false</code>>.
      */
-    public abstract boolean exists();
+    public abstract UFExistsResult exists();
 
     /**
      * Checks if this file is a directory.
      * @return Returns <code>true</code> if the file is a directory, otherwise <code>false</code>>.
      */
-    public abstract boolean isDirectory();
+    public abstract UFIsDirectoryResult isDirectory();
 
     /**
      * Checks if this file is a file.
      * @return Returns <code>true</code> if the file exists, otherwise <code>false</code>>.
      */
-    public abstract boolean isFile();
+    public abstract UFIsFileResult isFile();
 
     /**
      * Gets the datetime that this file was last modified.
@@ -294,7 +294,7 @@ public abstract class UFile {
      *          java.lang.SecurityManager#checkWrite(java.lang.String)}
      *          method does not permit the named directory to be created
      */
-    public abstract boolean mkdir();
+    public abstract UFMkdirResult mkdir();
 
     /**
      * Creates the directory named by this abstract pathname, including any
@@ -316,7 +316,7 @@ public abstract class UFile {
      *          method does not permit the named directory and all necessary
      *          parent directories to be created
      */
-    public abstract boolean mkdirs();
+    public abstract UFMkdirsResult mkdirs();
 
     /**
      * Sets the last-modified time of the file or directory named by this
@@ -394,11 +394,11 @@ public abstract class UFile {
      * @param destination The target destination. Must not exist prior to copy.
      */
     public void copyTo(UFile destination) throws IOException {
-        if(!exists()) {
+        if(!exists().isSuccessful()) {
             throw new FileNotFoundException("Could not find source file: "+getPath());
         }
         UFile destParent = destination.getParentUFile();
-        if(!destParent.exists()) {
+        if(!destParent.exists().isSuccessful()) {
             throw new FileNotFoundException("Could not find destination parent file: "+destParent.getPath());
         }
 
