@@ -100,21 +100,21 @@ public class UFileFtp extends UFile {
 
 
     @Override
-    public UFExistsResult exists() {
-        return new UFExistsResult(() -> path.equals(getFileSep()) || nonNull(asFTPFile()));
+    public UFOperationResult<Boolean> exists() {
+        return new UFOperationResult<>(this, () -> path.equals(getFileSep()) || nonNull(asFTPFile()));
     }
 
     @Override
-    public UFIsDirectoryResult isDirectory() {
-        return new UFIsDirectoryResult(() -> {
+    public UFOperationResult<Boolean> isDirectory() {
+        return new UFOperationResult<>(this, () -> {
             FTPFile sftpFile = asFTPFile();
             return nonNull(sftpFile) && sftpFile.isDirectory();
         });
     }
 
     @Override
-    public UFIsFileResult isFile() {
-        return new UFIsFileResult(() -> {
+    public UFOperationResult<Boolean> isFile() {
+        return new UFOperationResult<>(this, () -> {
             FTPFile sftpFile = asFTPFile();
             return nonNull(sftpFile) && sftpFile.isFile();
         });
@@ -202,8 +202,8 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public UFMkdirResult mkdir() {
-        return new UFMkdirResult(() -> {
+    public UFOperationResult<Boolean> mkdir() {
+        return new UFOperationResult<>(this, () -> {
             if (!getParentUFile().exists().isSuccessful()) {
                 return false;
             }
@@ -212,8 +212,8 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public UFMkdirsResult mkdirs() {
-        return new UFMkdirsResult(() -> {
+    public UFOperationResult<Boolean> mkdirs() {
+        return new UFOperationResult<>(this, () -> {
             UFile parent = getParentUFile();
             if (!parent.exists().isSuccessful()) {
                 parent.mkdirs();

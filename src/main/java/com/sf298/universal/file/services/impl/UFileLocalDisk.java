@@ -162,18 +162,18 @@ public class UFileLocalDisk extends UFile {
 
 
     @Override
-    public UFExistsResult exists() {
-        return new UFExistsResult(file::exists);
+    public UFOperationResult<Boolean> exists() {
+        return new UFOperationResult<>(this, file::exists);
     }
 
     @Override
-    public UFIsDirectoryResult isDirectory() {
-        return new UFIsDirectoryResult(file::isDirectory);
+    public UFOperationResult<Boolean> isDirectory() {
+        return new UFOperationResult<>(this, file::isDirectory);
     }
 
     @Override
-    public UFIsFileResult isFile() {
-        return new UFIsFileResult(file::isFile);
+    public UFOperationResult<Boolean> isFile() {
+        return new UFOperationResult<>(this, file::isFile);
     }
 
     @Override
@@ -217,13 +217,13 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
-    public UFMkdirResult mkdir() {
-        return new UFMkdirResult(file::mkdir);
+    public UFOperationResult<Boolean> mkdir() {
+        return new UFOperationResult<>(this, file::mkdir);
     }
 
     @Override
-    public UFMkdirsResult mkdirs() {
-        return new UFMkdirsResult(file::mkdirs);
+    public UFOperationResult<Boolean> mkdirs() {
+        return new UFOperationResult<>(this, file::mkdirs);
     }
 
     @Override

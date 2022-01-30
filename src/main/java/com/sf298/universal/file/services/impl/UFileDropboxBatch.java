@@ -15,31 +15,31 @@ import java.util.stream.Collectors;
 
 public class UFileDropboxBatch {
 
-    public static UFOperationBatchResult<UFExistsResult> exists(List<UFileDropbox> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> exists(List<UFileDropbox> targets) {
         return targets.stream()
                 .map(UFile::exists)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    public static UFOperationBatchResult<UFIsDirectoryResult> isDirectory(List<UFileDropbox> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> isDirectory(List<UFileDropbox> targets) {
         return targets.stream()
                 .map(UFile::isDirectory)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    public static UFOperationBatchResult<UFIsFileResult> isFile(List<UFileDropbox> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> isFile(List<UFileDropbox> targets) {
         return targets.stream()
                 .map(UFile::isFile)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    public static UFOperationBatchResult<UFMkdirResult> mkdir(List<UFileDropbox> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> mkdir(List<UFileDropbox> targets) {
         return targets.stream()
                 .map(UFile::mkdir)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    public static UFOperationBatchResult<UFMkdirsResult> mkdirs(List<UFileDropbox> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> mkdirs(List<UFileDropbox> targets) {
         return targets.stream()
                 .map(UFile::mkdirs)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));

@@ -66,19 +66,19 @@ public abstract class UFile {
      * Checks if this file exists.
      * @return Returns <code>true</code> if the file exists, otherwise <code>false</code>>.
      */
-    public abstract UFExistsResult exists();
+    public abstract UFOperationResult<Boolean> exists();
 
     /**
      * Checks if this file is a directory.
      * @return Returns <code>true</code> if the file is a directory, otherwise <code>false</code>>.
      */
-    public abstract UFIsDirectoryResult isDirectory();
+    public abstract UFOperationResult<Boolean> isDirectory();
 
     /**
      * Checks if this file is a file.
      * @return Returns <code>true</code> if the file exists, otherwise <code>false</code>>.
      */
-    public abstract UFIsFileResult isFile();
+    public abstract UFOperationResult<Boolean> isFile();
 
     /**
      * Gets the datetime that this file was last modified.
@@ -294,7 +294,7 @@ public abstract class UFile {
      *          java.lang.SecurityManager#checkWrite(java.lang.String)}
      *          method does not permit the named directory to be created
      */
-    public abstract UFMkdirResult mkdir();
+    public abstract UFOperationResult<Boolean> mkdir();
 
     /**
      * Creates the directory named by this abstract pathname, including any
@@ -316,7 +316,7 @@ public abstract class UFile {
      *          method does not permit the named directory and all necessary
      *          parent directories to be created
      */
-    public abstract UFMkdirsResult mkdirs();
+    public abstract UFOperationResult<Boolean> mkdirs();
 
     /**
      * Sets the last-modified time of the file or directory named by this

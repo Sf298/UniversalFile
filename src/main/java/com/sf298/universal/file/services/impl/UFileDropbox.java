@@ -117,33 +117,33 @@ public class UFileDropbox extends UFile {
 
 
     @Override
-    public UFExistsResult exists() {
+    public UFOperationResult<Boolean> exists() {
         if (path.equals(getFileSep()))
-            return new UFExistsResult(() -> true);
+            return new UFOperationResult<>(this, () -> true);
 
-        return new UFExistsResult(() -> {
+        return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
             return nonNull(metadataCache);
         });
     }
 
     @Override
-    public UFIsDirectoryResult isDirectory() {
+    public UFOperationResult<Boolean> isDirectory() {
         if (path.equals(getFileSep()))
-            return new UFIsDirectoryResult(() -> true);
+            return new UFOperationResult<>(this, () -> true);
 
-        return new UFIsDirectoryResult(() -> {
+        return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
             return nonNull(metadataCache) && metadataCache instanceof FolderMetadata;
         });
     }
 
     @Override
-    public UFIsFileResult isFile() {
+    public UFOperationResult<Boolean> isFile() {
         if (path.equals(getFileSep()))
-            return new UFIsFileResult(() -> false);
+            return new UFOperationResult<>(this, () -> false);
 
-        return new UFIsFileResult(() -> {
+        return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
             return nonNull(metadataCache) && metadataCache instanceof FileMetadata;
         });
@@ -230,17 +230,17 @@ public class UFileDropbox extends UFile {
     }
 
     @Override
-    public UFMkdirResult mkdir() {
-        return new UFMkdirResult(() -> false); //getParentUFile().exists() && mkdirs();
+    public UFOperationResult<Boolean> mkdir() {
+        return new UFOperationResult<>(this, () -> false); //getParentUFile().exists() && mkdirs();
     }
 
     @Override
-    public UFMkdirsResult mkdirs() {
+    public UFOperationResult<Boolean> mkdirs() {
         if (path.equals(getFileSep())) {
-            return new UFMkdirsResult(() -> false);
+            return new UFOperationResult<>(this, () -> false);
         }
 
-        return new UFMkdirsResult(() -> {
+        return new UFOperationResult<>(this, () -> {
             CreateFolderResult result = getClient().files().createFolderV2(path);
             return nonNull(result) && nonNull(result.getMetadata());
         });

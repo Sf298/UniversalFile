@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 public class UFileBatchManager {
 
-    public static UFOperationBatchResult<UFExistsResult> existsBatch(List<UFile> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> existsBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
                 UFileLocalDiskBatch::exists,
@@ -20,7 +20,7 @@ public class UFileBatchManager {
         );
     }
 
-    public static UFOperationBatchResult<UFIsDirectoryResult> isDirectoryBatch(List<UFile> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> isDirectoryBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
                 UFileLocalDiskBatch::isDirectory,
@@ -29,7 +29,7 @@ public class UFileBatchManager {
         );
     }
 
-    public static UFOperationBatchResult<UFIsFileResult> isFileBatch(List<UFile> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> isFileBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
                 UFileLocalDiskBatch::isFile,
@@ -38,7 +38,7 @@ public class UFileBatchManager {
         );
     }
 
-    public static UFOperationBatchResult<UFMkdirResult> mkdirBatch(List<UFile> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> mkdirBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
                 UFileLocalDiskBatch::mkdir,
@@ -47,7 +47,7 @@ public class UFileBatchManager {
         );
     }
 
-    public static UFOperationBatchResult<UFMkdirsResult> mkdirsBatch(List<UFile> targets) {
+    public static UFOperationBatchResult<UFOperationResult<Boolean>> mkdirsBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
                 UFileLocalDiskBatch::mkdirs,
@@ -56,15 +56,15 @@ public class UFileBatchManager {
         );
     }
 
-    private static <R extends UFOperationResult> UFOperationBatchResult<R> splitAndReorder(List<UFile> targets,
-                                                                                           Function<List<UFileLocalDisk>, UFOperationBatchResult<R>> localFilesBatch,
-                                                                                           Function<List<UFileFtp>, UFOperationBatchResult<R>> ftpBatch,
-                                                                                           Function<List<UFileDropbox>, UFOperationBatchResult<R>> dropboxBatch) {
+    private static <R> UFOperationBatchResult<UFOperationResult<R>> splitAndReorder(List<UFile> targets,
+                                                                                    Function<List<UFileLocalDisk>, UFOperationBatchResult<UFOperationResult<R>>> localFilesBatch,
+                                                                                    Function<List<UFileFtp>, UFOperationBatchResult<UFOperationResult<R>>> ftpBatch,
+                                                                                    Function<List<UFileDropbox>, UFOperationBatchResult<UFOperationResult<R>>> dropboxBatch) {
         if (targets.isEmpty()) {
             return new UFOperationBatchResult<>();
         }
 
-        Map<UFile, R> resultMap = new HashMap<>();
+        Map<UFile, UFOperationResult<R>> resultMap = new HashMap<>();
 
         resultMap.putAll(batchProcessForType(targets, UFileLocalDisk.class, localFilesBatch));
         resultMap.putAll(batchProcessForType(targets, UFileFtp.class, ftpBatch));
@@ -74,9 +74,9 @@ public class UFileBatchManager {
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    private static <I,R extends UFOperationResult> Map<I,R> batchProcessForType(List<UFile> unfilteredTargets,
-                                                                                Class<I> inputType,
-                                                                                Function<List<I>, UFOperationBatchResult<R>> resultBatch) {
+    private static <I,R extends UFOperationResult<?>> Map<I,R> batchProcessForType(List<UFile> unfilteredTargets,
+                                                                                   Class<I> inputType,
+                                                                                   Function<List<I>, UFOperationBatchResult<R>> resultBatch) {
         List<I> uFilesOfType = unfilteredTargets.stream()
                 .filter(inputType::isInstance)
                 .map(inputType::cast)
