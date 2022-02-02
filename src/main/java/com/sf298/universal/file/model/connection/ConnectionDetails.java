@@ -1,4 +1,4 @@
-package com.sf298.universal.file.model;
+package com.sf298.universal.file.model.connection;
 
 import java.util.HashMap;
 import java.util.Map;

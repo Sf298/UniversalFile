@@ -1,16 +1,7 @@
 package com.sf298.universal.file.services;
 
-import com.sf298.universal.file.model.responses.*;
-import com.sf298.universal.file.services.impl.*;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 public class UFileBatchManager {
-
+/*
     public static UFOperationBatchResult<UFOperationResult<Boolean>> existsBatch(List<UFile> targets) {
         return splitAndReorder(
                 targets,
@@ -90,5 +81,5 @@ public class UFileBatchManager {
         }
         return out;
     }
-
+*/
 }

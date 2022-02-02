@@ -2,6 +2,7 @@ package com.sf298.universal.file.services.impl;
 
 import com.sf298.universal.file.services.UFile;
 import com.sf298.universal.file.services.UFileTest;
+import com.sf298.universal.file.services.local.UFileLocalDisk;
 
 import java.io.IOException;
 import java.nio.file.Files;

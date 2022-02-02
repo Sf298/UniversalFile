@@ -1,12 +1,13 @@
 package com.sf298.universal.file.services;
 
-import com.sf298.universal.file.model.UFileFilter;
-import com.sf298.universal.file.model.UFilenameFilter;
+import com.sf298.universal.file.model.functions.UFileFilter;
+import com.sf298.universal.file.model.functions.UFilenameFilter;
 import com.sf298.universal.file.model.responses.*;
 
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
 
@@ -84,13 +85,39 @@ public abstract class UFile {
      * Gets the datetime that this file was last modified.
      * @return A {@link Date} object denoting the date and time this file was last modified.
      */
-    public abstract Date lastModified();
+    public abstract UFOperationResult<Date> lastModified();
+
+    /**
+     * Sets the last-modified time of the file or directory named by this
+     * abstract pathname.
+     *
+     * <p> All platforms support file-modification times to the nearest second,
+     * but some provide more precision.  The argument will be truncated to fit
+     * the supported precision.  If the operation succeeds and no intervening
+     * operations on the file take place, then the next invocation of the
+     * {@link #lastModified} method will return the (possibly
+     * truncated) {@code time} argument that was passed to this method.
+     *
+     * @param  time  The new last-modified time, measured in milliseconds since
+     *               the epoch (00:00:00 GMT, January 1, 1970)
+     *
+     * @return {@code true} if and only if the operation succeeded;
+     *          {@code false} otherwise
+     *
+     * @throws  IllegalArgumentException  If the argument is negative
+     *
+     * @throws  SecurityException
+     *          If a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkWrite(java.lang.String)}
+     *          method denies write access to the named file
+     */
+    public abstract UFOperationResult<Boolean> setLastModified(Date time);
 
     /**
      * Gets the size of this file.
      * @return The size of the file in bytes.
      */
-    public abstract long length();
+    public abstract UFOperationResult<Long> length();
 
     /**
      * Atomically creates a new, empty file named by this abstract pathname if
@@ -111,7 +138,22 @@ public abstract class UFile {
      *          java.lang.SecurityManager#checkWrite(java.lang.String)}
      *          method denies write access to the file
      */
-    public abstract boolean createNewFile();
+    public UFOperationResult<Boolean> createNewFile() {
+        UFOperationResult<Boolean> existsResult = exists();
+        if (!existsResult.isSuccessful()) {
+            return existsResult;
+        } else if (existsResult.getResult()) {
+            return UFOperationResult.createBool(this, false);
+        }
+
+        return new UFOperationResult<>(this, () -> {
+            getParentUFile().mkdirs().getResult();
+            OutputStream stream = write();
+            stream.close();
+            writeClose();
+            return true;
+        });
+    }
 
     /**
      * Deletes the file or directory denoted by this abstract pathname.  If
@@ -126,7 +168,23 @@ public abstract class UFile {
      *          java.lang.SecurityManager#checkDelete} method denies
      *          delete access to the file
      */
-    public abstract boolean delete(boolean recursive);
+    public abstract UFOperationResult<Boolean> delete();
+
+    /**
+     * Deletes the file or directory denoted by this abstract pathname.  If
+     * this pathname denotes a directory, then the directory must be empty in
+     * order to be deleted.
+     *
+     * @return  {@code true} if and only if the file or directory is
+     *          successfully deleted; {@code false} otherwise
+     *
+     * @throws  SecurityException
+     *          If a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkDelete} method denies
+     *          delete access to the file
+     */
+    public abstract UFOperationResult<Boolean> deleteRecursive();
+
 
     /**
      * Returns an array of strings naming the files and directories in the
@@ -154,7 +212,7 @@ public abstract class UFile {
      *          SecurityManager#checkRead(String)} method denies read access to
      *          the directory
      */
-    public abstract String[] list();
+    public abstract UFOperationResult<String[]> list();
 
     /**
      * Returns an array of strings naming the files and directories in the
@@ -185,11 +243,14 @@ public abstract class UFile {
      *
      * @see java.nio.file.Files#newDirectoryStream(Path,String)
      */
-    public String[] list(UFilenameFilter filter) {
-        return Arrays.stream(list())
-                .filter(f -> filter.accept(this, f))
-                .toArray(String[]::new);
+    public UFOperationResult<String[]> list(UFilenameFilter filter) {
+        return new UFOperationResult<>(this,
+                () -> Arrays.stream(list().getResult())
+                        .filter(f -> filter.accept(this, f))
+                        .toArray(String[]::new)
+        );
     }
+
 
     /**
      * Returns an array of abstract pathnames denoting the files in the
@@ -216,8 +277,7 @@ public abstract class UFile {
      *          SecurityManager#checkRead(String)} method denies read access to
      *          the directory
      */
-    public abstract UFile[] listFiles();
-
+    public abstract UFOperationResult<UFile[]> listFiles();
 
     /**
      * Returns an array of abstract pathnames denoting the files and
@@ -246,10 +306,12 @@ public abstract class UFile {
      *          SecurityManager#checkRead(String)} method denies read access to
      *          the directory
      */
-    public UFile[] listFiles(UFilenameFilter filter) {
-        return Arrays.stream(listFiles())
+    public UFOperationResult<UFile[]> listFiles(UFilenameFilter filter) {
+        return new UFOperationResult<>(this,
+                () -> Arrays.stream(listFiles().getResult())
                 .filter(f -> filter.accept(this, f.getName()))
-                .toArray(UFile[]::new);
+                .toArray(UFile[]::new)
+        );
     }
 
     /**
@@ -277,11 +339,14 @@ public abstract class UFile {
      *          SecurityManager#checkRead(String)} method denies read access to
      *          the directory
      */
-    public UFile[] listFiles(UFileFilter filter) {
-        return Arrays.stream(listFiles())
-                .filter(filter::accept)
-                .toArray(UFile[]::new);
+    public UFOperationResult<UFile[]> listFiles(UFileFilter filter) {
+        return new UFOperationResult<>(this,
+                () -> Arrays.stream(listFiles().getResult())
+                    .filter(filter::accept)
+                    .toArray(UFile[]::new)
+        );
     }
+
 
     /**
      * Creates the directory named by this abstract pathname.
@@ -317,32 +382,6 @@ public abstract class UFile {
      *          parent directories to be created
      */
     public abstract UFOperationResult<Boolean> mkdirs();
-
-    /**
-     * Sets the last-modified time of the file or directory named by this
-     * abstract pathname.
-     *
-     * <p> All platforms support file-modification times to the nearest second,
-     * but some provide more precision.  The argument will be truncated to fit
-     * the supported precision.  If the operation succeeds and no intervening
-     * operations on the file take place, then the next invocation of the
-     * {@link #lastModified} method will return the (possibly
-     * truncated) {@code time} argument that was passed to this method.
-     *
-     * @param  time  The new last-modified time, measured in milliseconds since
-     *               the epoch (00:00:00 GMT, January 1, 1970)
-     *
-     * @return {@code true} if and only if the operation succeeded;
-     *          {@code false} otherwise
-     *
-     * @throws  IllegalArgumentException  If the argument is negative
-     *
-     * @throws  SecurityException
-     *          If a security manager exists and its {@link
-     *          java.lang.SecurityManager#checkWrite(java.lang.String)}
-     *          method denies write access to the named file
-     */
-    public abstract boolean setLastModified(Date time);
 
 
     /**
@@ -393,28 +432,32 @@ public abstract class UFile {
      * Works for copying files between kinds of destinations.
      * @param destination The target destination. Must not exist prior to copy.
      */
-    public void copyTo(UFile destination) throws IOException {
-        if(!exists().isSuccessful()) {
-            throw new FileNotFoundException("Could not find source file: "+getPath());
-        }
+    public UFOperationResult<Boolean> copyTo(UFile destination) {
         UFile destParent = destination.getParentUFile();
-        if(!destParent.exists().isSuccessful()) {
-            throw new FileNotFoundException("Could not find destination parent file: "+destParent.getPath());
+        UFOperationResult<Boolean> destParentExistsResult = destParent.exists();
+        if(!destParentExistsResult.isSuccessful()) {
+            return new UFOperationResult<>(this, destParentExistsResult.getException());
+        } else if (!destParentExistsResult.getResult()) {
+            return new UFOperationResult<>(this, new FileNotFoundException("Could not find destination parent file: "+destParent.getPath()));
         }
 
-        InputStream in = new BufferedInputStream(this.read());
-        OutputStream out = new BufferedOutputStream(destination.write());
+        return new UFOperationResult<>(this, () -> {
+                InputStream in = new BufferedInputStream(this.read());
+                OutputStream out = new BufferedOutputStream(destination.write());
 
-        byte[] buffer = new byte[getBufferSize()];
-        int lengthRead;
-        while ((lengthRead = in.read(buffer)) > 0) {
-            out.write(buffer, 0, lengthRead);
-            out.flush();
-        }
-        in.close();
-        readClose();
-        out.close();
-        destination.writeClose();
+                byte[] buffer = new byte[getBufferSize()];
+                int lengthRead;
+                while ((lengthRead = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, lengthRead);
+                    out.flush();
+                }
+                in.close();
+                readClose();
+                out.close();
+                destination.writeClose();
+
+                return true;
+        });
     }
 
     /**
@@ -422,7 +465,23 @@ public abstract class UFile {
      * Works for moving files between kinds of destinations. Moves the file using the native move function if possible.
      * @param destination The target destination. Must not exist prior to move.
      */
-    public abstract void moveTo(UFile destination) throws IOException;
+    public UFOperationResult<Boolean> moveTo(UFile destination) {
+        UFOperationResult<Boolean> copyToResult = copyTo(destination);
+        if(!copyToResult.isSuccessful()) {
+            return new UFOperationResult<>(this, copyToResult.getException());
+        } else if (!copyToResult.getResult()) {
+            return new UFOperationResult<>(this, new FileNotFoundException("Copy failed: reason unknown"));
+        }
+
+        UFOperationResult<Boolean> deleteResult = deleteRecursive();
+        if(!deleteResult.isSuccessful()) {
+            return new UFOperationResult<>(this, deleteResult.getException());
+        } else if (!deleteResult.getResult()) {
+            return new UFOperationResult<>(this, new FileNotFoundException("Move failed: reason unknown"));
+        }
+
+        return UFOperationResult.createBool(this, true);
+    }
 
     /*
     boolean canRead();
@@ -481,6 +540,16 @@ public abstract class UFile {
                 return parent + fileSep + child;
             }
         }
+    }
+
+    public static String join(String fileSep, String... names) {
+        return Arrays.stream(names)
+                .map(s -> {
+                    int start = s.startsWith(fileSep) ? 1 : 0;
+                    int end = s.endsWith(fileSep) ? s.length()-1 : s.length();
+                    return s.substring(start, end);
+                })
+                .collect(Collectors.joining(fileSep));
     }
 
     /**

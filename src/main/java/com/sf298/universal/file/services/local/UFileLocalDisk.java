@@ -1,4 +1,4 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services.local;
 
 import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
@@ -177,43 +177,48 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
-    public Date lastModified() {
-        return new Date(file.lastModified());
+    public UFOperationResult<Date> lastModified() {
+        return new UFOperationResult<>(this, () -> new Date(file.lastModified()));
     }
 
     @Override
-    public long length() {
-        return file.length();
+    public UFOperationResult<Long> length() {
+        return new UFOperationResult<>(this, file::length);
     }
 
 
     @Override
-    public boolean createNewFile() {
-        try {
-            return file.createNewFile();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    public UFOperationResult<Boolean> createNewFile() {
+        return new UFOperationResult<>(this, file::createNewFile);
+    }
+
+    @Override
+    public UFOperationResult<Boolean> delete() {
+        return new UFOperationResult<>(this, file::delete);
+    }
+
+    @Override
+    public UFOperationResult<Boolean> deleteRecursive() {
+        if (isDirectory().getResultOrDefault(false)) {
+            UFOperationResult<UFile[]> children = listFiles();
+            if (!children.isSuccessful()) {
+                return new UFOperationResult<>(this, children.getException());
+            }
+
+            Arrays.stream(children.getResult()).forEach(UFile::deleteRecursive);
         }
+        return delete();
     }
 
     @Override
-    public boolean delete(boolean recursive) {
-        if (recursive && isDirectory().isSuccessful()) {
-            Arrays.stream(listFiles()).forEach(uf -> uf.delete(true));
-        }
-        return file.delete();
+    public UFOperationResult<String[]> list() {
+        return new UFOperationResult<>(this, file::list);
     }
 
     @Override
-    public String[] list() {
-        return file.list();
-    }
-
-    @Override
-    public UFile[] listFiles() {
-        return Arrays.stream(list())
-                .map(this::goTo)
-                .toArray(UFile[]::new);
+    public UFOperationResult<UFile[]> listFiles() {
+        return new UFOperationResult<>(this,
+                () -> Arrays.stream(list().getResult()).map(this::goTo).toArray(UFile[]::new));
     }
 
     @Override
@@ -227,8 +232,8 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
-    public boolean setLastModified(Date time) {
-        return file.setLastModified(time.getTime());
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return new UFOperationResult<>(this, () -> file.setLastModified(time.getTime()));
     }
 
     @Override
@@ -259,15 +264,17 @@ public class UFileLocalDisk extends UFile {
     public void close() {}
 
     @Override
-    public void moveTo(UFile destination) throws IOException {
+    public UFOperationResult<Boolean> moveTo(UFile destination) {
         if (destination instanceof UFileLocalDisk) {
-            boolean result = file.renameTo(((UFileLocalDisk)destination).file);
-            if(!result) {
-                throw new RuntimeException("Unknown error occurred. Could not move '"+getPath()+"' to '"+destination.getPath()+"'");
-            }
+            return new UFOperationResult<>(this, () -> {
+                boolean result = file.renameTo(((UFileLocalDisk)destination).file);
+                if(!result) {
+                    throw new RuntimeException("Unknown error occurred. Could not move '"+getPath()+"' to '"+destination.getPath()+"'");
+                }
+                return true;
+            });
         } else {
-            copyTo(destination);
-            delete(true);
+            return super.moveTo(destination);
         }
     }
 

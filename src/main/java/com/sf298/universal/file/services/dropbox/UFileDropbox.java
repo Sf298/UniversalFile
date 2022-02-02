@@ -1,10 +1,12 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services.dropbox;
 
 import com.dropbox.core.DbxException;
 import com.dropbox.core.DbxRequestConfig;
+import com.dropbox.core.RateLimitException;
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.*;
-import com.sf298.universal.file.model.ConnectionDetails;
+import com.sf298.universal.file.model.connection.ConnectionDetails;
+import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
 
@@ -14,8 +16,10 @@ import java.io.OutputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.dropbox.core.v2.files.WriteMode.ADD;
 import static com.dropbox.core.v2.files.WriteMode.OVERWRITE;
-import static com.sf298.universal.file.model.ConnectionParam.*;
+import static com.sf298.universal.file.model.connection.ConnectionParam.*;
+import static com.sf298.universal.file.services.dropbox.UFileDropboxBatch.DROPBOX_BATCH;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
@@ -30,6 +34,7 @@ public class UFileDropbox extends UFile {
      * The cache of clients {@link DbxClientV2}. Reduces overhead of new connections.
      */
     private static final Map<String, DbxClientV2> clients = new ConcurrentHashMap<>();
+
     private final String accessToken;
     private final String path;
     private Metadata metadataCache;
@@ -119,7 +124,7 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<Boolean> exists() {
         if (path.equals(getFileSep()))
-            return new UFOperationResult<>(this, () -> true);
+            return UFOperationResult.createBool(this, true);
 
         return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
@@ -130,7 +135,7 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<Boolean> isDirectory() {
         if (path.equals(getFileSep()))
-            return new UFOperationResult<>(this, () -> true);
+            return UFOperationResult.createBool(this, true);
 
         return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
@@ -141,7 +146,7 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<Boolean> isFile() {
         if (path.equals(getFileSep()))
-            return new UFOperationResult<>(this, () -> false);
+            return UFOperationResult.createBool(this, false);
 
         return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
@@ -150,105 +155,89 @@ public class UFileDropbox extends UFile {
     }
 
     @Override
-    public Date lastModified() {
-        //populateMetadataCache();
-        if (metadataCache instanceof FileMetadata) {
-            return ((FileMetadata) metadataCache).getClientModified();
-        }
-        return null;
-    }
-
-    @Override
-    public long length() {
-        //populateMetadataCache();
-        if (metadataCache instanceof FileMetadata) {
-            return ((FileMetadata) metadataCache).getSize();
-        }
-        return -1;
-    }
-
-
-    @Override
-    public boolean createNewFile() {
-        if (exists().isSuccessful()) {
-            return false;
-        }
-
-        try {
-            getParentUFile().mkdirs();
-            OutputStream stream = write();
-            stream.close();
-            writeClose();
-        } catch (IOException e) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public boolean delete(boolean recursive) {
-        if (!recursive && listFiles().length > 0) {
-            return false;
-        }
-
-        try {
-            getClient().files().deleteV2(path);
-            return true;
-        } catch (DbxException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    @Override
-    public String[] list() {
-        return Arrays.stream(listFiles())
-                .map(UFile::getPath)
-                .map(f -> {
-                    int index = f.lastIndexOf("/");
-                    return index==-1 ? f : f.substring(index+1);
-                })
-                .toArray(String[]::new);
-    }
-
-    @Override
-    public UFile[] listFiles() {
-        try {
-            ListFolderResult results = getClient().files().listFolder(path.equals(getFileSep()) ? "" : path);
-            List<Metadata> files = new ArrayList<>(results.getEntries());
-            while (results.getHasMore()) {
-                results = getClient().files().listFolderContinue(results.getCursor());
-                files.addAll(results.getEntries());
-            }
-
-            return files.stream()
-                    .map(m -> new UFileDropbox(accessToken, m))
-                    .toArray(UFile[]::new);
-        } catch (DbxException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @Override
-    public UFOperationResult<Boolean> mkdir() {
-        return new UFOperationResult<>(this, () -> false); //getParentUFile().exists() && mkdirs();
-    }
-
-    @Override
-    public UFOperationResult<Boolean> mkdirs() {
-        if (path.equals(getFileSep())) {
-            return new UFOperationResult<>(this, () -> false);
-        }
-
+    public UFOperationResult<Date> lastModified() {
         return new UFOperationResult<>(this, () -> {
-            CreateFolderResult result = getClient().files().createFolderV2(path);
-            return nonNull(result) && nonNull(result.getMetadata());
+            populateMetadataCache();
+            if (nonNull(metadataCache) && metadataCache instanceof FileMetadata) {
+                return ((FileMetadata) metadataCache).getClientModified();
+            }
+            return null;
         });
     }
 
     @Override
-    public boolean setLastModified(Date time) {
-        return false;
+    public UFOperationResult<Long> length() {
+        return new UFOperationResult<>(this, () -> {
+            populateMetadataCache();
+            if (metadataCache instanceof FileMetadata) {
+                return ((FileMetadata) metadataCache).getSize();
+            }
+            return -1L;
+        });
+    }
+
+
+    @Override
+    public UFOperationResult<Boolean> delete() {
+        return DROPBOX_BATCH.delete(List.of(this)).get(0);
+    }
+
+    @Override
+    public UFOperationResult<Boolean> deleteRecursive() {
+        return DROPBOX_BATCH.deleteRecursive(List.of(this)).get(0);
+    }
+
+    @Override
+    public UFOperationResult<String[]> list() {
+        return new UFOperationResult<>(this, () -> {
+            ListFolderResult returned = getClient().files().listFolder(path.substring(1));
+            return returned.getEntries().stream().map(Metadata::getPathLower).toArray(String[]::new);
+        });
+    }
+
+    @Override
+    public UFOperationResult<UFile[]> listFiles() {
+        return new UFOperationResult<>(this, () -> {
+            ListFolderResult returned = getClient().files().listFolder(path.substring(1));
+            return returned.getEntries().stream().map(m -> new UFileDropbox(accessToken, m)).toArray(UFile[]::new);
+        });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> mkdir() {
+        if (path.equals(getFileSep()) || exists().getResult()) {
+            return UFOperationResult.createBool(this, false);
+        }
+
+        return new UFOperationResult<>(this, () -> {
+            getClient().files().createFolderV2(path);
+            return true;
+        });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> mkdirs() {
+        if (path.equals(getFileSep()) || exists().getResult()) {
+            return UFOperationResult.createBool(this, false);
+        }
+
+        return new UFOperationResult<>(this, () -> {
+            int i = 0;
+            while (true) {
+                try {
+                    CreateFolderResult result = getClient().files().createFolderV2(path);
+                    return nonNull(result) && nonNull(result.getMetadata());
+                } catch (RateLimitException ex) {
+                    if (i >= 5) throw ex;
+                    Thread.sleep(++i * 1000L);
+                }
+            }
+        });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return UFOperationResult.createBool(this, false);
     }
 
 
@@ -278,18 +267,11 @@ public class UFileDropbox extends UFile {
 
     @Override
     public OutputStream append() throws IOException {
-        OutputStream out = write();
-        InputStream in = read();
-
-        // copy existing
-        byte[] buffer = new byte[getBufferSize()];
-        int lengthRead;
-        while ((lengthRead = in.read(buffer)) > 0) {
-            out.write(buffer, 0, lengthRead);
+        try {
+            return getClient().files().uploadBuilder(path).withMode(ADD).start().getOutputStream();
+        } catch (DbxException e) {
+            throw new IOException(e);
         }
-        out.flush();
-
-        return out;
     }
 
     @Override
@@ -299,11 +281,20 @@ public class UFileDropbox extends UFile {
     public void close() {}
 
     @Override
-    public void moveTo(UFile destination) throws IOException {
-        try {
-            getClient().files().moveV2(path, destination.getPath());
-        } catch (DbxException e) {
-            throw new IOException(e);
+    public UFOperationResult<Boolean> moveTo(UFile destination) {
+        if (destination instanceof UFileDropbox) {
+            return DROPBOX_BATCH.moveTo(List.of(new BatchMove(this, destination))).get(0);
+        } else {
+            return super.moveTo(destination);
+        }
+    }
+
+    @Override
+    public UFOperationResult<Boolean> copyTo(UFile destination) {
+        if (destination instanceof UFileDropbox) {
+            return DROPBOX_BATCH.copyTo(List.of(new BatchMove(this, destination))).get(0);
+        } else {
+            return super.moveTo(destination);
         }
     }
 

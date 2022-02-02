@@ -1,21 +1,14 @@
 package com.sf298.universal.file.services.impl;
 
-import com.sf298.universal.file.model.ConnectionDetails;
+import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.services.UFile;
 import com.sf298.universal.file.services.UFileTest;
+import com.sf298.universal.file.services.ftp.UFileFtp;
 import org.junit.jupiter.api.Test;
-import org.mockftpserver.fake.FakeFtpServer;
-import org.mockftpserver.fake.UserAccount;
-import org.mockftpserver.fake.filesystem.FileSystem;
-import org.mockftpserver.fake.filesystem.WindowsFakeFileSystem;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Date;
 import java.util.Map;
 
-import static com.sf298.universal.file.model.ConnectionParam.*;
+import static com.sf298.universal.file.model.connection.ConnectionParam.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class UFileFtpTest extends UFileTest {

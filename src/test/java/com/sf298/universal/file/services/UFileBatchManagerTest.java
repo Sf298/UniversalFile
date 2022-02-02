@@ -1,6 +1,5 @@
 package com.sf298.universal.file.services;
 
-import com.sf298.universal.file.model.responses.UFExistsResult;
 import com.sf298.universal.file.model.responses.UFOperationBatchResult;
 import com.sf298.universal.file.model.responses.UFOperationResult;
 import org.junit.jupiter.api.*;
@@ -40,7 +39,7 @@ public class UFileBatchManagerTest {
             this.uFolder111[i] = this.roots[i].goTo("folder1"+ this.roots[i].getFileSep()+"folder11"+ this.roots[i].getFileSep()+"folder111");
         }
     }
-
+/*
     @BeforeEach
     public void setup() {
         List<UFile> filesToMk = UFileBatchManager.existsBatch(asList(roots)).stream()
@@ -81,5 +80,5 @@ public class UFileBatchManagerTest {
         UFile rand = roots.goTo("mkdirs/noExist.txt");
         assertThat(rand.exists().isSuccessful()).isFalse();
     }
-
+*/
 }

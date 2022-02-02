@@ -1,8 +1,9 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services.ftp;
 
-import com.sf298.universal.file.model.ConnectionDetails;
+import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.model.responses.*;
 import com.sf298.universal.file.services.UFile;
+import com.sf298.universal.file.services.local.UFileLocalDisk;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPClientConfig;
@@ -11,12 +12,11 @@ import org.apache.commons.net.ftp.FTPFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.sf298.universal.file.model.ConnectionParam.*;
+import static com.sf298.universal.file.model.connection.ConnectionParam.*;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 import static org.apache.commons.net.ftp.FTPReply.*;
@@ -121,84 +121,58 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public Date lastModified() {
-        try {
-            return timeValFormat.parse(getClient().getModificationTime(path));
-        } catch (IOException | ParseException e) {
-            throw new RuntimeException(e);
-        }
+    public UFOperationResult<Date> lastModified() {
+        return new UFOperationResult<>(this, () -> timeValFormat.parse(getClient().getModificationTime(path)));
     }
 
     @Override
-    public long length() {
-        /*FTPFile sftpFile = asFTPFile();
-        if(isNull(sftpFile)) {
-            throw new RuntimeException("Unable to find file: " + path);
-        }
-        return sftpFile.getSize();*/
-        return -1;
+    public UFOperationResult<Long> length() {
+        return new UFOperationResult<>(this, () -> Long.parseLong(getClient().getSize(path)));
     }
 
 
     @Override
-    public boolean createNewFile() {
-        if (exists().isSuccessful()) {
-            return false;
-        }
-
-        try {
-            getParentUFile().mkdirs();
-            OutputStream stream = write();
-            stream.close();
-            writeClose();
-        } catch (IOException e) {
-            return false;
-        }
-        return true;
+    public UFOperationResult<Boolean> delete() {
+        return new UFOperationResult<>(this, () -> getClient().deleteFile(path) || getClient().removeDirectory(path));
     }
 
     @Override
-    public boolean delete(boolean recursive) {/*
-        try {
-            if (isDirectory()) {
-                if (recursive) {
-                    Arrays.stream(listFiles()).forEach(uf -> uf.delete(true));
-                }
-                return getClient().removeDirectory(path);
-            } else {
-                return getClient().deleteFile(path);
+    public UFOperationResult<Boolean> deleteRecursive() {
+        if (isDirectory().getResultOrDefault(false)) {
+            UFOperationResult<UFile[]> children = listFiles();
+            if (!children.isSuccessful()) {
+                return new UFOperationResult<>(this, children.getException());
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }*/
-        return false;
+
+            Arrays.stream(children.getResult()).forEach(UFile::deleteRecursive);
+
+            return new UFOperationResult<>(this, () -> getClient().removeDirectory(path));
+        } else {
+            return delete();
+        }
     }
 
     @Override
-    public String[] list() {
-        try {
-            return Arrays.stream(getClient().listNames(path))
+    public UFOperationResult<String[]> list() {
+        return new UFOperationResult<>(this,
+                () -> Arrays.stream(getClient().listNames(path))
                     .map(f -> {
                         int index = f.lastIndexOf("/");
                         return index==-1 ? f : f.substring(index+1);
                     })
                     .filter(p -> !p.equals(".") && !p.equals(".."))
-                    .toArray(String[]::new);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+                    .toArray(String[]::new)
+        );
     }
 
     @Override
-    public UFile[] listFiles() {
-        try {
-            return Arrays.stream(getClient().listFiles(path))
+    public UFOperationResult<UFile[]> listFiles() {
+        return new UFOperationResult<>(this, () ->
+                Arrays.stream(getClient().listFiles(path))
                     .map(this::toUFile)
                     .filter(uf -> !uf.getPath().endsWith(".") && !uf.getPath().endsWith(".."))
-                    .toArray(UFile[]::new);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+                    .toArray(UFile[]::new)
+        );
     }
 
     @Override
@@ -215,7 +189,7 @@ public class UFileFtp extends UFile {
     public UFOperationResult<Boolean> mkdirs() {
         return new UFOperationResult<>(this, () -> {
             UFile parent = getParentUFile();
-            if (!parent.exists().isSuccessful()) {
+            if (!parent.exists().getResult()) {
                 parent.mkdirs();
             }
             return getClient().makeDirectory(path);
@@ -223,12 +197,9 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public boolean setLastModified(Date time) {
-        try {
-            return getClient().setModificationTime(path, timeValFormat.format(time));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return new UFOperationResult<>(this,
+                () -> getClient().setModificationTime(path, timeValFormat.format(time)));
     }
 
 
@@ -286,8 +257,8 @@ public class UFileFtp extends UFile {
             if(client.isConnected()) {
                 try {
                     client.disconnect();
-                } catch(IOException ignored) {
-                    ignored.printStackTrace();
+                } catch(IOException ex) {
+                    ex.printStackTrace();
                 }
             }
         }
@@ -295,15 +266,17 @@ public class UFileFtp extends UFile {
     }
 
     @Override
-    public void moveTo(UFile destination) {
-        try {
-            boolean result = getClient().rename(this.getPath(), destination.getPath());
-            if(!result) {
-                throw new RuntimeException("Unknown error occurred. Could not move '"+getPath()+"' to '"+destination.getPath()+"'");
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    public UFOperationResult<Boolean> moveTo(UFile destination) {
+        if (destination instanceof UFileFtp && ((UFileFtp)destination).login.equals(this.login)) {
+            return new UFOperationResult<>(this, () -> {
+                boolean result = getClient().rename(this.getPath(), destination.getPath());
+                if(!result) {
+                    throw new RuntimeException("Unknown error occurred. Could not move '"+getPath()+"' to '"+destination.getPath()+"'");
+                }
+                return true;
+            });
         }
+        return super.moveTo(destination);
     }
 
 
