@@ -1,7 +1,6 @@
-package com.sf298.universal.file.services.local;
+package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.responses.*;
-import com.sf298.universal.file.services.UFile;
 
 import java.io.*;
 import java.net.URI;
@@ -20,6 +19,7 @@ public class UFileLocalDisk extends UFile {
      * @param   file  A {@link File} object.
      */
     public UFileLocalDisk(File file) {
+        super(file.getAbsolutePath());
         this.file = file;
     }
 
@@ -140,24 +140,9 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
-    public String getName() {
-        return file.getName();
-    }
-
-    @Override
-    public String getParent() {
-        return file.getParent();
-    }
-
-    @Override
     public UFile getParentUFile() {
         File parent = file.getParentFile();
         return isNull(parent) ? null : new UFileLocalDisk(parent);
-    }
-
-    @Override
-    public String getPath() {
-        return file.getAbsolutePath();
     }
 
 

@@ -1,4 +1,4 @@
-package com.sf298.universal.file.services.dropbox;
+package com.sf298.universal.file.services;
 
 import com.dropbox.core.DbxException;
 import com.dropbox.core.DbxRequestConfig;
@@ -6,20 +6,22 @@ import com.dropbox.core.RateLimitException;
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.*;
 import com.sf298.universal.file.model.connection.ConnectionDetails;
+import com.sf298.universal.file.model.functions.ExceptionNet;
+import com.sf298.universal.file.model.functions.ThrowableFunction;
 import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
-import com.sf298.universal.file.services.UFile;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import static com.dropbox.core.v2.files.WriteMode.ADD;
 import static com.dropbox.core.v2.files.WriteMode.OVERWRITE;
 import static com.sf298.universal.file.model.connection.ConnectionParam.*;
-import static com.sf298.universal.file.services.dropbox.UFileDropboxBatch.DROPBOX_BATCH;
+import static com.sf298.universal.file.services.UFileDropboxBatch.DROPBOX_BATCH;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
@@ -36,7 +38,6 @@ public class UFileDropbox extends UFile {
     private static final Map<String, DbxClientV2> clients = new ConcurrentHashMap<>();
 
     private final String accessToken;
-    private final String path;
     private Metadata metadataCache;
 
     /**
@@ -57,11 +58,10 @@ public class UFileDropbox extends UFile {
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
     public UFileDropbox(ConnectionDetails login, String path) {
-        this.path = (!path.equals(getFileSep()) && path.endsWith(getFileSep())) ? path.substring(0, path.length() - 1) : path;
-        if (!this.path.matches("([A-Z]:[\\\\/]|/).*")) {
-            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should be like 'C:\\' or '/'.");
+        super(path);
+        if (!getPath().startsWith("/")) {
+            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should start with '/'.");
         }
-
         accessToken = login.get(TOKEN);
     }
 
@@ -74,9 +74,9 @@ public class UFileDropbox extends UFile {
         this(new ConnectionDetails(Map.of(TOKEN, uFile.accessToken)), path);
     }
     private UFileDropbox(String accessToken, Metadata metadata) {
+        super(metadata.getPathLower());
         this.accessToken = accessToken;
         this.metadataCache = metadata;
-        this.path = metadata.getPathLower();
     }
 
     public String getAccessToken() {
@@ -100,30 +100,15 @@ public class UFileDropbox extends UFile {
 
 
     @Override
-    public String getName() {
-        return path.substring(path.lastIndexOf(getFileSep())+1);
-    }
-
-    @Override
-    public String getParent() {
-        return parent(path, getFileSep());
-    }
-
-    @Override
     public UFile getParentUFile() {
         String parentStr = getParent();
         return isNull(parentStr) ? null : new UFileDropbox(this, parentStr);
     }
 
-    @Override
-    public String getPath() {
-        return path;
-    }
-
 
     @Override
     public UFOperationResult<Boolean> exists() {
-        if (path.equals(getFileSep()))
+        if (getPath().equals(getFileSep()))
             return UFOperationResult.createBool(this, true);
 
         return new UFOperationResult<>(this, () -> {
@@ -134,7 +119,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public UFOperationResult<Boolean> isDirectory() {
-        if (path.equals(getFileSep()))
+        if (getPath().equals(getFileSep()))
             return UFOperationResult.createBool(this, true);
 
         return new UFOperationResult<>(this, () -> {
@@ -145,7 +130,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public UFOperationResult<Boolean> isFile() {
-        if (path.equals(getFileSep()))
+        if (getPath().equals(getFileSep()))
             return UFOperationResult.createBool(this, false);
 
         return new UFOperationResult<>(this, () -> {
@@ -190,7 +175,7 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<String[]> list() {
         return new UFOperationResult<>(this, () -> {
-            ListFolderResult returned = getClient().files().listFolder(path.substring(1));
+            ListFolderResult returned = callApi(5, () -> getClient().files().listFolder(getPath().substring(1)));
             return returned.getEntries().stream().map(Metadata::getPathLower).toArray(String[]::new);
         });
     }
@@ -198,40 +183,32 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<UFile[]> listFiles() {
         return new UFOperationResult<>(this, () -> {
-            ListFolderResult returned = getClient().files().listFolder(path.substring(1));
+            ListFolderResult returned = callApi(5, () -> getClient().files().listFolder(getPath().substring(1)));
             return returned.getEntries().stream().map(m -> new UFileDropbox(accessToken, m)).toArray(UFile[]::new);
         });
     }
 
     @Override
     public UFOperationResult<Boolean> mkdir() {
-        if (path.equals(getFileSep()) || exists().getResult()) {
+        if (getPath().equals(getFileSep()) || exists().getResult()) {
             return UFOperationResult.createBool(this, false);
         }
 
         return new UFOperationResult<>(this, () -> {
-            getClient().files().createFolderV2(path);
+            callApi(5, () -> getClient().files().createFolderV2(getPath()));
             return true;
         });
     }
 
     @Override
     public UFOperationResult<Boolean> mkdirs() {
-        if (path.equals(getFileSep()) || exists().getResult()) {
+        if (getPath().equals(getFileSep()) || exists().getResult()) {
             return UFOperationResult.createBool(this, false);
         }
 
         return new UFOperationResult<>(this, () -> {
-            int i = 0;
-            while (true) {
-                try {
-                    CreateFolderResult result = getClient().files().createFolderV2(path);
-                    return nonNull(result) && nonNull(result.getMetadata());
-                } catch (RateLimitException ex) {
-                    if (i >= 5) throw ex;
-                    Thread.sleep(++i * 1000L);
-                }
-            }
+            CreateFolderResult result = callApi(5, () -> getClient().files().createFolderV2(getPath()));
+            return nonNull(result) && nonNull(result.getMetadata());
         });
     }
 
@@ -244,7 +221,7 @@ public class UFileDropbox extends UFile {
     @Override
     public InputStream read() throws IOException {
         try {
-            return getClient().files().download(path).getInputStream();
+            return getClient().files().download(getPath()).getInputStream();
         } catch (DbxException e) {
             throw new IOException(e);
         }
@@ -256,7 +233,7 @@ public class UFileDropbox extends UFile {
     @Override
     public OutputStream write() throws IOException {
         try {
-            return getClient().files().uploadBuilder(path).withMode(OVERWRITE).start().getOutputStream();
+            return getClient().files().uploadBuilder(getPath()).withMode(OVERWRITE).start().getOutputStream();
         } catch (DbxException e) {
             throw new IOException(e);
         }
@@ -268,7 +245,7 @@ public class UFileDropbox extends UFile {
     @Override
     public OutputStream append() throws IOException {
         try {
-            return getClient().files().uploadBuilder(path).withMode(ADD).start().getOutputStream();
+            return getClient().files().uploadBuilder(getPath()).withMode(ADD).start().getOutputStream();
         } catch (DbxException e) {
             throw new IOException(e);
         }
@@ -301,12 +278,12 @@ public class UFileDropbox extends UFile {
 
     @Override
     public UFile goTo(String path) {
-        return new UFileDropbox(this, join(this.path, path, getFileSep()));
+        return new UFileDropbox(this, join(getPath(), path, getFileSep()));
     }
 
     @Override
     public String toString() {
-        return path;
+        return getPath();
     }
 
     @Override
@@ -314,12 +291,12 @@ public class UFileDropbox extends UFile {
         if (this == o) return true;
         if (!(o instanceof UFileDropbox)) return false;
         UFileDropbox uFile = (UFileDropbox) o;
-        return path.equals(uFile.path) && accessToken.equals(uFile.accessToken);
+        return getPath().equals(uFile.getPath()) && accessToken.equals(uFile.accessToken);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, accessToken);
+        return Objects.hash(getPath(), accessToken);
     }
 
 
@@ -331,7 +308,7 @@ public class UFileDropbox extends UFile {
     private void populateMetadataCache() throws DbxException {
         if (isNull(metadataCache)) {
             try {
-                metadataCache = getClient().files().getMetadata(path);
+                metadataCache = callApi(0, () -> getClient().files().getMetadata(getPath()));
             } catch (GetMetadataErrorException ignored) {
                 // file doesnt exist, do nothing
             } catch (DbxException e) {
@@ -339,6 +316,29 @@ public class UFileDropbox extends UFile {
                 throw e;
             }
         }
+    }
+
+    private <T> T callApi(int retryCount, ExceptionNet<T, DbxException> function) throws DbxException {
+        int i = 0;
+        while (true) {
+            try {
+                return function.run();
+            } catch (DbxException ex) {
+                long sleepTime = (ex instanceof RateLimitException) ? ((RateLimitException)ex).getBackoffMillis()+10 : ++i*1000L;
+
+                if (i > retryCount) throw ex;
+
+                if (!(ex instanceof RateLimitException)) {
+                    ex.printStackTrace();
+                }
+
+                try {
+                    Thread.sleep(sleepTime);
+                } catch (InterruptedException ignored) {}
+            }
+        }
+
+
     }
 
 }

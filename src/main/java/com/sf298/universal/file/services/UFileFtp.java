@@ -1,9 +1,7 @@
-package com.sf298.universal.file.services.ftp;
+package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.model.responses.*;
-import com.sf298.universal.file.services.UFile;
-import com.sf298.universal.file.services.local.UFileLocalDisk;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPClientConfig;
@@ -33,7 +31,6 @@ public class UFileFtp extends UFile {
      */
     private static final Map<Pair<ConnectionDetails, String>, FTPClient> ftpConnections = new ConcurrentHashMap<>();
 
-    private final String path;
     private final ConnectionDetails login;
 
     /**
@@ -54,9 +51,9 @@ public class UFileFtp extends UFile {
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
     public UFileFtp(ConnectionDetails login, String path) {
-        this.path = (!path.equals(getFileSep()) && path.endsWith(getFileSep())) ? path.substring(0, path.length() - 1) : path;
-        if (!this.path.matches("([A-Z]:[\\\\/]|/).*")) {
-            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should be like 'C:\\' or '/'.");
+        super(path);
+        if (!getPath().matches("([A-Z]:[\\\\/]|/).*")) {
+            throw new IllegalArgumentException("Error: '"+ getPath() +"' doesn't have a valid beginning. Should be like 'C:\\' or '/'.");
         }
         this.login = login;
     }
@@ -78,30 +75,15 @@ public class UFileFtp extends UFile {
 
 
     @Override
-    public String getName() {
-        return path.substring(path.lastIndexOf(getFileSep())+1);
-    }
-
-    @Override
-    public String getParent() {
-        return parent(path, getFileSep());
-    }
-
-    @Override
     public UFile getParentUFile() {
         String parentStr = getParent();
         return isNull(parentStr) ? null : new UFileFtp(login, parentStr);
     }
 
-    @Override
-    public String getPath() {
-        return path;
-    }
-
 
     @Override
     public UFOperationResult<Boolean> exists() {
-        return new UFOperationResult<>(this, () -> path.equals(getFileSep()) || nonNull(asFTPFile()));
+        return new UFOperationResult<>(this, () -> getPath().equals(getFileSep()) || nonNull(asFTPFile()));
     }
 
     @Override
@@ -122,18 +104,18 @@ public class UFileFtp extends UFile {
 
     @Override
     public UFOperationResult<Date> lastModified() {
-        return new UFOperationResult<>(this, () -> timeValFormat.parse(getClient().getModificationTime(path)));
+        return new UFOperationResult<>(this, () -> timeValFormat.parse(getClient().getModificationTime(getPath())));
     }
 
     @Override
     public UFOperationResult<Long> length() {
-        return new UFOperationResult<>(this, () -> Long.parseLong(getClient().getSize(path)));
+        return new UFOperationResult<>(this, () -> Long.parseLong(getClient().getSize(getPath())));
     }
 
 
     @Override
     public UFOperationResult<Boolean> delete() {
-        return new UFOperationResult<>(this, () -> getClient().deleteFile(path) || getClient().removeDirectory(path));
+        return new UFOperationResult<>(this, () -> getClient().deleteFile(getPath()) || getClient().removeDirectory(getPath()));
     }
 
     @Override
@@ -146,7 +128,7 @@ public class UFileFtp extends UFile {
 
             Arrays.stream(children.getResult()).forEach(UFile::deleteRecursive);
 
-            return new UFOperationResult<>(this, () -> getClient().removeDirectory(path));
+            return new UFOperationResult<>(this, () -> getClient().removeDirectory(getPath()));
         } else {
             return delete();
         }
@@ -155,7 +137,7 @@ public class UFileFtp extends UFile {
     @Override
     public UFOperationResult<String[]> list() {
         return new UFOperationResult<>(this,
-                () -> Arrays.stream(getClient().listNames(path))
+                () -> Arrays.stream(getClient().listNames(getPath()))
                     .map(f -> {
                         int index = f.lastIndexOf("/");
                         return index==-1 ? f : f.substring(index+1);
@@ -168,7 +150,7 @@ public class UFileFtp extends UFile {
     @Override
     public UFOperationResult<UFile[]> listFiles() {
         return new UFOperationResult<>(this, () ->
-                Arrays.stream(getClient().listFiles(path))
+                Arrays.stream(getClient().listFiles(getPath()))
                     .map(this::toUFile)
                     .filter(uf -> !uf.getPath().endsWith(".") && !uf.getPath().endsWith(".."))
                     .toArray(UFile[]::new)
@@ -181,7 +163,7 @@ public class UFileFtp extends UFile {
             if (!getParentUFile().exists().isSuccessful()) {
                 return false;
             }
-            return getClient().makeDirectory(path);
+            return getClient().makeDirectory(getPath());
         });
     }
 
@@ -192,20 +174,20 @@ public class UFileFtp extends UFile {
             if (!parent.exists().getResult()) {
                 parent.mkdirs();
             }
-            return getClient().makeDirectory(path);
+            return getClient().makeDirectory(getPath());
         });
     }
 
     @Override
     public UFOperationResult<Boolean> setLastModified(Date time) {
         return new UFOperationResult<>(this,
-                () -> getClient().setModificationTime(path, timeValFormat.format(time)));
+                () -> getClient().setModificationTime(getPath(), timeValFormat.format(time)));
     }
 
 
     @Override
     public InputStream read() throws IOException {
-        return getClient("read").retrieveFileStream(path);
+        return getClient("read").retrieveFileStream(getPath());
     }
 
     @Override
@@ -220,7 +202,7 @@ public class UFileFtp extends UFile {
 
     @Override
     public OutputStream write() throws IOException {
-        return getClient("write").storeFileStream(path);
+        return getClient("write").storeFileStream(getPath());
     }
 
     @Override
@@ -235,7 +217,7 @@ public class UFileFtp extends UFile {
 
     @Override
     public OutputStream append() throws IOException {
-        return getClient("append").appendFileStream(path);
+        return getClient("append").appendFileStream(getPath());
     }
 
     @Override
@@ -282,7 +264,7 @@ public class UFileFtp extends UFile {
 
     @Override
     public UFile goTo(String path) {
-        return new UFileFtp(this, join(this.path, path, getFileSep()));
+        return new UFileFtp(this, join(getPath(), path, getFileSep()));
     }
 
     @Override
@@ -292,7 +274,7 @@ public class UFileFtp extends UFile {
     public String toString() {
         String username = nonNull(login.get(USERNAME)) ? login.get(USERNAME) + "@" : "";
         String port = nonNull(login.get(PORT)) ? ":" + login.get(PORT) : "";
-        return "ftp://" + username + login.get(HOST) + port + path;
+        return "ftp://" + username + login.get(HOST) + port + getPath();
     }
 
     @Override
@@ -300,13 +282,13 @@ public class UFileFtp extends UFile {
         if (this == o) return true;
         if (!(o instanceof UFileFtp)) return false;
         UFileFtp uFileFtp = (UFileFtp) o;
-        return path.equals(uFileFtp.path) &&
+        return getPath().equals(uFileFtp.getPath()) &&
                 login.equals(uFileFtp.login);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, login);
+        return Objects.hash(getPath(), login);
     }
 
     /**
@@ -315,7 +297,7 @@ public class UFileFtp extends UFile {
      * @return The created {@link UFile}.
      */
     private UFile toUFile(FTPFile ftpFile) {
-        return new UFileFtp(this, path + (path.endsWith(getFileSep()) ? "" : getFileSep()) + ftpFile.getName());
+        return new UFileFtp(this, getPath() + (getPath().endsWith(getFileSep()) ? "" : getFileSep()) + ftpFile.getName());
     }
 
     /**
@@ -324,7 +306,7 @@ public class UFileFtp extends UFile {
      */
     private FTPFile asFTPFile() throws IOException {
         return Arrays.stream(getClient().listFiles(getParent()))
-                .filter(ftp -> path.endsWith(ftp.getName()))
+                .filter(ftp -> getPath().endsWith(ftp.getName()))
                 .findFirst().orElse(null);
     }
 

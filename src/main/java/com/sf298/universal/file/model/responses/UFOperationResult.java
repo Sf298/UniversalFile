@@ -20,7 +20,7 @@ public class UFOperationResult<T> {
         this.exception = exception;
     }
 
-    public UFOperationResult(UFile actionedFile, ExceptionNet<T> exceptionNet) {
+    public UFOperationResult(UFile actionedFile, ExceptionNet<T, Exception> exceptionNet) {
         this.actionedFile = actionedFile;
         try {
             this.result = exceptionNet.run();

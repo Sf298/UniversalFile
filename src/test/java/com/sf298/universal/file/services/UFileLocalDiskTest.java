@@ -1,8 +1,8 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.services.UFile;
 import com.sf298.universal.file.services.UFileTest;
-import com.sf298.universal.file.services.local.UFileLocalDisk;
+import com.sf298.universal.file.services.UFileLocalDisk;
 
 import java.io.IOException;
 import java.nio.file.Files;

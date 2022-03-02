@@ -1,9 +1,9 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.services.UFile;
 import com.sf298.universal.file.services.UFileTest;
-import com.sf298.universal.file.services.dropbox.UFileDropbox;
+import com.sf298.universal.file.services.UFileDropbox;
 
 import java.util.Map;
 

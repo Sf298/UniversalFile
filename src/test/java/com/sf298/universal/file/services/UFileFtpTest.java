@@ -1,9 +1,9 @@
-package com.sf298.universal.file.services.impl;
+package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.services.UFile;
 import com.sf298.universal.file.services.UFileTest;
-import com.sf298.universal.file.services.ftp.UFileFtp;
+import com.sf298.universal.file.services.UFileFtp;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -24,25 +24,6 @@ public class UFileFtpTest extends UFileTest {
         ));
 
         root = new UFileFtp(login).goTo("UFileFtpTest");
-
-        /*try {
-            Path temp = Files.createTempDirectory("UFileFtpTest");
-
-            FakeFtpServer fakeFtpServer = new FakeFtpServer();
-            fakeFtpServer.setServerControlPort(Integer.parseInt(login.get(PORT)));
-            fakeFtpServer.addUserAccount(new UserAccount(
-                    login.get(USERNAME),
-                    login.get(PASSWORD),
-                    temp.toString()
-            ));
-
-            FileSystem fileSystem = new WindowsFakeFileSystem();
-            fakeFtpServer.setFileSystem(fileSystem);
-
-            fakeFtpServer.start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }*/
     }
 
     public UFileFtpTest() {

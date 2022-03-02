@@ -1,8 +1,6 @@
 package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.responses.UFOperationResult;
-import com.sf298.universal.file.services.dropbox.UFileDropbox;
-import com.sf298.universal.file.services.dropbox.UFileDropboxBatch;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;
@@ -10,7 +8,7 @@ import java.io.PrintWriter;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.Arrays.asList;
+import static com.sf298.universal.file.services.UFileDropboxBatch.DROPBOX_BATCH;
 import static java.util.Objects.isNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,15 +48,12 @@ public abstract class UFileTest {
     @BeforeEach
     public void setup() {
         System.out.println("Start setup");
-        System.out.println("A" + Arrays.toString(root.listFiles().getResult()));
-        assert Arrays.stream(root.listFiles().getResult())
+        /*assert Arrays.stream(root.listFiles().getResult())
                 .map(UFile::deleteRecursive)
-                .allMatch(UFOperationResult::getResult);
-        System.out.println("B" + Arrays.toString(root.listFiles().getResult()));
-        assert Arrays.stream(root.listFiles().getResult())
-                .map(UFile::deleteRecursive)
-                .allMatch(UFOperationResult::getResult);
-        System.out.println("C" + Arrays.toString(root.listFiles().getResult()));
+                .allMatch(UFOperationResult::getResult);*/
+        DROPBOX_BATCH.deleteRecursive(Arrays.stream(root.listFiles().getResultOrDefault(new UFile[0]))
+                .map(uf -> (UFileDropbox)uf)
+                .collect(Collectors.toList()));
         assert uFolder111.mkdirs().getResult();
         assert uFile1.createNewFile().getResult();
         assert uFile11.createNewFile().getResult();
@@ -73,8 +68,9 @@ public abstract class UFileTest {
         uFolder1.close();
         uFolder11.close();
         uFolder111.close();
-        Arrays.stream(root.listFiles().getResult())
-                .forEach(UFile::deleteRecursive);
+        DROPBOX_BATCH.deleteRecursive(Arrays.stream(root.listFiles().getResultOrDefault(new UFile[0]))
+                .map(uf -> (UFileDropbox)uf)
+                .collect(Collectors.toList()));
         root.close();
         System.out.println("End close");
     }

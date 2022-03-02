@@ -10,10 +10,26 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 
 public abstract class UFile {
 
-    public int bufferSize = 1024;
+    private final String path;
+    private int bufferSize;
+    private UFMetadata metadataCache;
+
+    public UFile(String path) {
+        this(path, 1024);
+    }
+
+    public UFile(String path, int bufferSize) {
+        this.path = path.endsWith(getFileSep()) && nonNull(parent(path, getFileSep())) ? path.substring(0, path.length() - 1) : path;
+        /* Match windows pattern
+        if (!getPath().matches("([A-Z]:[\\\\/]|/).*")) {
+            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should be like 'C:\\' or '/'.");
+        }*/
+        this.bufferSize = bufferSize;
+    }
 
     /**
      * Get the buffer size used when copying/moving files.
@@ -42,13 +58,17 @@ public abstract class UFile {
      * Get the pathname of this {@link UFile}.
      * @return A path of <code>/a/b/c.txt</code> would return <code>c.txt</code>.
      */
-    public abstract String getName();
+    public String getName() {
+        return path.substring(path.lastIndexOf(getFileSep())+1);
+    }
 
     /**
      * Get the pathname of the parent of this {@link UFile}.
      * @return A path of <code>/a/b/c.txt</code> would return <code>/a/b</code>.
      */
-    public abstract String getParent();
+    public String getParent() {
+        return parent(path, getFileSep());
+    }
 
     /**
      * Get the parent of this {@link UFile} as a {@link UFile}.
@@ -60,7 +80,9 @@ public abstract class UFile {
      * Get the pathname of this {@link UFile}.
      * @return The pathname.
      */
-    public abstract String getPath();
+    public String getPath() {
+        return path;
+    }
 
 
     /**
@@ -509,7 +531,9 @@ public abstract class UFile {
     /**
      * Clears any caching used in this {@link UFile}.
      */
-    public abstract void clearCache();
+    public void clearCache() {
+        metadataCache = null;
+    }
 
     /**
      * Joins a parent and a child pathname with the given <code>fileSep</code>.<br>
@@ -520,11 +544,17 @@ public abstract class UFile {
      * @return Returns the combined pathname.
      */
     public static String join(String parent, String child, String fileSep) {
-        while (child.startsWith("../") || child.startsWith("..\\")) {
-            child = child.substring(3);
-            parent = parent(parent, fileSep);
-            if (isNull(parent)) {
-                throw new RuntimeException(new FileNotFoundException("Could not step up, out of root."));
+        while (true) {
+            if (child.startsWith("../") || child.startsWith("..\\")) {
+                child = child.substring(3);
+                parent = parent(parent, fileSep);
+                if (isNull(parent)) {
+                    throw new RuntimeException(new FileNotFoundException("Could not step up, out of root."));
+                }
+            } else if (child.startsWith("./") || child.startsWith(".\\")) {
+                child = child.substring(2);
+            } else {
+                break;
             }
         }
         if (parent.endsWith(fileSep)) {
@@ -558,7 +588,7 @@ public abstract class UFile {
      * @param fileSep The file separator used.
      * @return The parent pathname
      */
-    public static String parent(String path, String fileSep) {
+    private static String parent(String path, String fileSep) {
         if (fileSep.equals(path) || fileSep.endsWith(":/") || fileSep.endsWith(":\\") || !path.contains(fileSep)) {
             return null;
         }

@@ -10,7 +10,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class UFileBatchDefault<T extends UFile> {
+public class UFileBatch<T extends UFile> {
 
     public UFOperationBatchResult<UFOperationResult<Boolean>> exists(List<T> targets) {
         return targets.stream()

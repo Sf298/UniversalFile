@@ -1,12 +1,13 @@
-package com.sf298.universal.file.services.dropbox;
+package com.sf298.universal.file.services;
 
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.DeleteArg;
+import com.dropbox.core.v2.files.DeleteBatchJobStatus;
+import com.dropbox.core.v2.files.DeleteBatchLaunch;
 import com.dropbox.core.v2.files.RelocationPath;
 import com.sf298.universal.file.model.functions.ThrowableFunction;
 import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
-import com.sf298.universal.file.services.UFileBatchDefault;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.*;
 
-public class UFileDropboxBatch extends UFileBatchDefault<UFileDropbox> {
+class UFileDropboxBatch extends UFileBatch<UFileDropbox> {
 
     public static UFileDropboxBatch DROPBOX_BATCH = new UFileDropboxBatch();
 
@@ -35,7 +36,14 @@ public class UFileDropboxBatch extends UFileBatchDefault<UFileDropbox> {
         Map<UFileDropbox, UFOperationResult<Boolean>> generated = processGroupsByToken(targets, identity(), files -> {
             DbxClientV2 client = files.get(0).getClient();
             List<DeleteArg> toDelete = files.stream().map(uf -> new DeleteArg(uf.getPath())).collect(toList());
-            client.files().deleteBatch(toDelete);
+            DeleteBatchLaunch handle = client.files().deleteBatch(toDelete);
+
+            while (!client.files().deleteBatchCheck(handle.getAsyncJobIdValue()).isComplete()) {
+                try {
+                    Thread.sleep(100);
+                } catch (Exception ignored) {}
+            }
+
             return files.stream().collect(toMap(identity(), uf -> true));
         });
 
