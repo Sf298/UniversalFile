@@ -16,7 +16,8 @@ public abstract class UFile {
 
     private final String path;
     private int bufferSize;
-    private UFMetadata metadataCache;
+    private boolean hasAppended = false;
+    UFMetadata metadataCache;
 
     public UFile(String path) {
         this(path, 1024);
@@ -165,7 +166,7 @@ public abstract class UFile {
         if (!existsResult.isSuccessful()) {
             return existsResult;
         } else if (existsResult.getResult()) {
-            return UFOperationResult.createBool(this, false);
+            return UFOperationResult.createBoolOperation(this, false);
         }
 
         return new UFOperationResult<>(this, () -> {
@@ -437,12 +438,35 @@ public abstract class UFile {
      * @return Returns the opened stream.
      * @throws IOException If an I/O error occurred.
      */
-    public abstract OutputStream append() throws IOException;
+    public OutputStream append() throws IOException {
+        UFile tempFile = goTo(getPath()+".appendtmp");
+        hasAppended = true;
+        moveTo(tempFile);
+
+        InputStream in = new BufferedInputStream(tempFile.read());
+        OutputStream out = new BufferedOutputStream(this.write());
+
+        byte[] buffer = new byte[getBufferSize()];
+        int lengthRead;
+        while ((lengthRead = in.read(buffer)) > 0) {
+            out.write(buffer, 0, lengthRead);
+        }
+        tempFile.readClose();
+
+        return out;
+    };
 
     /**
      * Finishes up any operations remaining after the {@link OutputStream} returned by {@link #append()} is closed.
      */
-    public abstract void appendClose();
+    public void appendClose() {
+        if (hasAppended) {
+            UFile tempFile = goTo(getPath() + ".appendtmp");
+            tempFile.delete();
+            writeClose();
+            hasAppended = false;
+        }
+    };
 
     /**
      * Closes the primary connection used by this {@link UFile} to the remote server.
@@ -460,7 +484,7 @@ public abstract class UFile {
         if(!destParentExistsResult.isSuccessful()) {
             return new UFOperationResult<>(this, destParentExistsResult.getException());
         } else if (!destParentExistsResult.getResult()) {
-            return new UFOperationResult<>(this, new FileNotFoundException("Could not find destination parent file: "+destParent.getPath()));
+            destParent.mkdirs();
         }
 
         return new UFOperationResult<>(this, () -> {
@@ -471,10 +495,10 @@ public abstract class UFile {
                 int lengthRead;
                 while ((lengthRead = in.read(buffer)) > 0) {
                     out.write(buffer, 0, lengthRead);
-                    out.flush();
                 }
-                in.close();
+                this.close();
                 readClose();
+                out.flush();
                 out.close();
                 destination.writeClose();
 
@@ -502,7 +526,7 @@ public abstract class UFile {
             return new UFOperationResult<>(this, new FileNotFoundException("Move failed: reason unknown"));
         }
 
-        return UFOperationResult.createBool(this, true);
+        return UFOperationResult.createBoolOperation(this, true);
     }
 
     /*
@@ -524,6 +548,13 @@ public abstract class UFile {
     /**
      * Goes to a pathname relative to the pathname of this {@link UFile}.
      * @param path The relative path. Prepending with <code>../</code> causes it to go up a level.
+     * @return The created {@link UFile}.
+     */
+    public abstract UFile stepInto(String path);
+
+    /**
+     * Goes to a pathname on the same filesystem.
+     * @param path The full path.
      * @return The created {@link UFile}.
      */
     public abstract UFile goTo(String path);

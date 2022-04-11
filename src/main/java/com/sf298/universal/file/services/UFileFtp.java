@@ -263,8 +263,13 @@ public class UFileFtp extends UFile {
 
 
     @Override
-    public UFile goTo(String path) {
+    public UFile stepInto(String path) {
         return new UFileFtp(this, join(getPath(), path, getFileSep()));
+    }
+
+    @Override
+    public UFile goTo(String path) {
+        return new UFileFtp(this, join(path, getFileSep()));
     }
 
     @Override

@@ -6,9 +6,7 @@ import org.junit.jupiter.api.*;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.*;
-import java.util.stream.Collectors;
 
-import static com.sf298.universal.file.services.UFileDropboxBatch.DROPBOX_BATCH;
 import static java.util.Objects.isNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,11 +16,9 @@ public abstract class UFileTest {
 
     private static final Random rand = new Random();
     private final UFile root;
-    private final String file1 = "File1.txt";
-    private final String file111;
+    private final String file1 = "file1.txt";
     private final String folder1;
     private final String folder11;
-    private final String folder111;
     private final UFile uFile1;
     private final UFile uFile11;
     private final UFile uFolder1;
@@ -33,27 +29,25 @@ public abstract class UFileTest {
     public UFileTest(UFile root) {
         this.root = root;
 
-        this.file111 = "folder1"+root.getFileSep()+"folder11"+root.getFileSep()+"File1.txt";
+        String file111 = "folder1" + root.getFileSep() + "folder11" + root.getFileSep() + "file1.txt";
         this.folder1 = "folder1";
         this.folder11 = "folder1"+root.getFileSep()+"folder11";
-        this.folder111 = "folder1"+root.getFileSep()+"folder11"+root.getFileSep()+"folder111";
+        String folder111 = "folder1" + root.getFileSep() + "folder11" + root.getFileSep() + "folder111";
 
-        this.uFile1 = root.goTo(file1);
-        this.uFile11 = root.goTo(file111);
-        this.uFolder1 = root.goTo(folder1);
-        this.uFolder11 = root.goTo(folder11);
-        this.uFolder111 = root.goTo(folder111);
+        this.uFile1 = root.stepInto(file1);
+        this.uFile11 = root.stepInto(file111);
+        this.uFolder1 = root.stepInto(folder1);
+        this.uFolder11 = root.stepInto(folder11);
+        this.uFolder111 = root.stepInto(folder111);
+
+        assert Arrays.stream(root.listFiles().getResult())
+                .map(UFile::deleteRecursive)
+                .allMatch(UFOperationResult::getResult);
     }
 
     @BeforeEach
     public void setup() {
         System.out.println("Start setup");
-        /*assert Arrays.stream(root.listFiles().getResult())
-                .map(UFile::deleteRecursive)
-                .allMatch(UFOperationResult::getResult);*/
-        DROPBOX_BATCH.deleteRecursive(Arrays.stream(root.listFiles().getResultOrDefault(new UFile[0]))
-                .map(uf -> (UFileDropbox)uf)
-                .collect(Collectors.toList()));
         assert uFolder111.mkdirs().getResult();
         assert uFile1.createNewFile().getResult();
         assert uFile11.createNewFile().getResult();
@@ -68,9 +62,9 @@ public abstract class UFileTest {
         uFolder1.close();
         uFolder11.close();
         uFolder111.close();
-        DROPBOX_BATCH.deleteRecursive(Arrays.stream(root.listFiles().getResultOrDefault(new UFile[0]))
-                .map(uf -> (UFileDropbox)uf)
-                .collect(Collectors.toList()));
+        assert Arrays.stream(root.listFiles().getResult())
+                .map(UFile::deleteRecursive)
+                .allMatch(UFOperationResult::getResult);
         root.close();
         System.out.println("End close");
     }
@@ -78,10 +72,10 @@ public abstract class UFileTest {
 
     @Test
     public void testGetName() {
-        UFile dir = root.goTo("a/b/c/");
+        UFile dir = root.stepInto("a/b/c/");
         assertThat(dir.getName()).isEqualTo("c");
 
-        UFile file = root.goTo("a/b/c.txt");
+        UFile file = root.stepInto("a/b/c.txt");
         assertThat(file.getName()).isEqualTo("c.txt");
     }
 
@@ -120,7 +114,7 @@ public abstract class UFileTest {
     public void testExists() {
         assertThat(uFile1.exists().getResult()).isTrue();
 
-        UFile rand = root.goTo("mkdirs/noExist.txt");
+        UFile rand = root.stepInto("mkdirs/noExist.txt");
         assertThat(rand.exists().getResult()).isFalse();
     }
 
@@ -153,7 +147,7 @@ public abstract class UFileTest {
 
     @Test
     public void testCreateNewFile() {
-        UFile f = root.goTo("createNewFile.txt");
+        UFile f = root.stepInto("createNewFile.txt");
         assertThat(f.exists().getResult()).isFalse();
         assertThat(f.createNewFile().getResult()).isTrue();
         assertThat(f.exists().getResult()).isTrue();
@@ -163,15 +157,19 @@ public abstract class UFileTest {
     @Test
     public void testDelete() {
         assertThat(uFolder1.delete().getResult()).isFalse();
+        uFile11.clearCache();
         assertThat(uFolder1.exists().getResult()).isTrue();
 
         assertThat(uFile11.delete().getResult()).isTrue();
+        uFile11.clearCache();
         assertThat(uFile11.exists().getResult()).isFalse();
 
         assertThat(uFolder111.delete().getResult()).isTrue();
+        uFolder111.clearCache();
         assertThat(uFolder111.exists().getResult()).isFalse();
 
         assertThat(uFolder1.deleteRecursive().getResult()).isTrue();
+        uFolder1.clearCache();
         assertThat(uFolder1.exists().getResult()).isFalse();
     }
 
@@ -211,7 +209,7 @@ public abstract class UFileTest {
     @Test
     @Order(1)
     public void testMkdir() {
-        UFile folders = root.goTo("mkdir/mkdir2");
+        UFile folders = root.stepInto("mkdir/mkdir2");
         assertThat(folders.mkdir().getResult()).isFalse();
         assertThat(folders.exists().getResult()).isFalse();
     }
@@ -219,36 +217,44 @@ public abstract class UFileTest {
     @Test
     @Order(0)
     public void testMkdirs() {
-        UFile folders = root.goTo("mkdirs/mkdirs2");
+        UFile folders = root.stepInto("mkdirs/mkdirs2");
         assertThat(folders.mkdirs().getResult()).isTrue();
         assertThat(folders.exists().getResult()).isTrue();
     }
 
 
     @Test
-    public void testFileContents() throws IOException {
+    public void testFileWrite() throws IOException {
+        String contents1 = "test File" + System.lineSeparator() + "Contents";
+
+        PrintWriter writeStream = new PrintWriter(uFile1.write());
+        writeStream.write(contents1);
+        writeStream.flush();
+        uFile1.writeClose();
+
+        Scanner s1 = new Scanner(uFile1.read()).useDelimiter("\\A");
+        String result1 = s1.hasNext() ? s1.next() : "";
+        uFile1.readClose();
+        assertThat(result1).isEqualTo(contents1);
+    }
+
+    @Test
+    public void testFileAppend() throws IOException, InterruptedException {
         String contents1 = "test File" + System.lineSeparator() + "Contents";
         String contents2 = "abc";
 
         PrintWriter writeStream = new PrintWriter(uFile1.write());
         writeStream.write(contents1);
-        writeStream.close();
+        writeStream.flush();
         uFile1.writeClose();
-
-        Scanner s1 = new Scanner(uFile1.read()).useDelimiter("\\A");
-        String result1 = s1.hasNext() ? s1.next() : "";
-        s1.close();
-        uFile1.readClose();
-        assertThat(result1).isEqualTo(contents1);
 
         PrintWriter appendStream = new PrintWriter(uFile1.append());
         appendStream.write(contents2);
-        appendStream.close();
+        appendStream.flush();
         uFile1.appendClose();
 
         Scanner s2 = new Scanner(uFile1.read()).useDelimiter("\\A");
         String result2 = s2.hasNext() ? s2.next() : "";
-        s2.close();
         uFile1.readClose();
         assertThat(result2).isEqualTo(contents1 + contents2);
     }
@@ -259,14 +265,14 @@ public abstract class UFileTest {
         String contents = "abc124";
         PrintWriter writeStream = new PrintWriter(uFile1.write());
         writeStream.write(contents);
-        writeStream.close();
+        writeStream.flush();
         uFile1.writeClose();
 
-        UFile dest1 = root.goTo("notExist/file1.txt");
-        UFile dest2 = root.goTo("folder1/file1.txt");
+        UFile dest1 = root.stepInto("notExist/file1.txt");
+        UFile dest2 = root.stepInto("folder1/file1.txt");
 
-        assertThat(uFile1.copyTo(dest1).isSuccessful()).isFalse();
-        assertThat(dest1.exists().getResult()).isFalse();
+        assertThat(uFile1.copyTo(dest1).getResult()).isTrue();
+        assertThat(dest1.exists().getResult()).isTrue();
 
         uFile1.copyTo(dest2);
         assertThat(dest2.exists().getResult()).isTrue();
@@ -274,7 +280,6 @@ public abstract class UFileTest {
 
         Scanner s1 = new Scanner(dest2.read()).useDelimiter("\\A");
         String result1 = s1.hasNext() ? s1.next() : "";
-        s1.close();
         dest2.readClose();
         assertThat(result1).isEqualTo(contents);
     }
@@ -284,23 +289,20 @@ public abstract class UFileTest {
         String contents = "abc124";
         PrintWriter writeStream = new PrintWriter(uFile1.write());
         writeStream.write(contents);
-        writeStream.close();
+        writeStream.flush();
         uFile1.writeClose();
 
-        UFile dest1 = root.goTo("notExist/file1.txt");
-        UFile dest2 = root.goTo("folder1/file1.txt");
+        UFile dest1 = root.stepInto("notExist/file1.txt");
 
-        assertThat(uFile1.moveTo(dest1).isSuccessful()).isFalse();
-        assertThat(dest1.exists().getResult()).isFalse();
+        assertThat(uFile1.moveTo(dest1).getResult()).isTrue();
+        assertThat(dest1.exists().getResult()).isTrue();
 
-        uFile1.moveTo(dest2);
-        assertThat(dest2.exists().getResult()).isTrue();
-        assertThat(uFile1.exists().getResult()).isFalse();
+        uFile1.clearCache();
+        assertThat(uFile1.moveTo(dest1).getResult()).isFalse();
 
-        Scanner s1 = new Scanner(dest2.read()).useDelimiter("\\A");
+        Scanner s1 = new Scanner(dest1.read()).useDelimiter("\\A");
         String result1 = s1.hasNext() ? s1.next() : "";
-        s1.close();
-        dest2.readClose();
+        dest1.readClose();
         assertThat(result1).isEqualTo(contents);
     }
 

@@ -1,9 +1,5 @@
 package com.sf298.universal.file.services;
 
-import com.sf298.universal.file.services.UFile;
-import com.sf298.universal.file.services.UFileTest;
-import com.sf298.universal.file.services.UFileLocalDisk;
-
 import java.io.IOException;
 import java.nio.file.Files;
 
@@ -19,7 +15,7 @@ public class UFileLocalDiskTest extends UFileTest {
         }
     }
 
-    public UFileLocalDiskTest() throws IOException {
+    public UFileLocalDiskTest() {
         super(root);
     }
 

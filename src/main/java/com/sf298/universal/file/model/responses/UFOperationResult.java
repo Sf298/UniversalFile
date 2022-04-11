@@ -7,7 +7,7 @@ import static java.util.Objects.nonNull;
 
 public class UFOperationResult<T> {
 
-    public static UFOperationResult<Boolean> createBool(UFile file, boolean value) {
+    public static UFOperationResult<Boolean> createBoolOperation(UFile file, boolean value) {
         return new UFOperationResult<>(file, () -> value);
     }
 

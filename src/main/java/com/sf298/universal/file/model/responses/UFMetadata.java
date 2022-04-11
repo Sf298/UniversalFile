@@ -4,6 +4,8 @@ import java.util.Date;
 
 public class UFMetadata {
 
+    public static final UFMetadata NOT_EXIST = new UFMetadata(false, null, null, null, false, false);
+
     /**
      * Whether the object exists on the filesystem.
      */
@@ -12,7 +14,7 @@ public class UFMetadata {
     /**
      * The size of this file in bytes.
      */
-    Long size;
+    Long length;
 
     /**
      * The date this file was created.
@@ -27,12 +29,23 @@ public class UFMetadata {
     /**
      * Whether the object is a file.
      */
-    Boolean isFile;
+    boolean isFile;
 
     /**
      * Whether the object is a folder.
      */
-    Boolean isFolder;
+    boolean isFolder;
+
+    public UFMetadata() {}
+
+    public UFMetadata(boolean exists, Long length, Date created, Date lastModified, boolean isFile, boolean isFolder) {
+        this.exists = exists;
+        this.length = length;
+        this.created = created;
+        this.lastModified = lastModified;
+        this.isFile = isFile;
+        this.isFolder = isFolder;
+    }
 
     /**
      * Gets whether the object exists on the filesystem.
@@ -45,8 +58,8 @@ public class UFMetadata {
      * Gets the size of this file.
      * @return The size of the file in bytes.
      */
-    public Long getSize() {
-        return size;
+    public Long getLength() {
+        return length;
     }
 
     public Date getCreated() {
@@ -57,11 +70,11 @@ public class UFMetadata {
         return lastModified;
     }
 
-    public Boolean getFile() {
+    public boolean isFile() {
         return isFile;
     }
 
-    public Boolean getFolder() {
+    public boolean isFolder() {
         return isFolder;
     }
 

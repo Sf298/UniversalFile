@@ -13,6 +13,8 @@ import static java.util.Objects.isNull;
 public class UFileLocalDisk extends UFile {
 
     private final File file;
+    private OutputStream writeUploader;
+    private OutputStream appendUploader;
 
     /**
      * Creates a new {@link UFile} instance by converting the given {@link File}.
@@ -203,7 +205,7 @@ public class UFileLocalDisk extends UFile {
     @Override
     public UFOperationResult<UFile[]> listFiles() {
         return new UFOperationResult<>(this,
-                () -> Arrays.stream(list().getResult()).map(this::goTo).toArray(UFile[]::new));
+                () -> Arrays.stream(list().getResult()).map(this::stepInto).toArray(UFile[]::new));
     }
 
     @Override
@@ -231,19 +233,39 @@ public class UFileLocalDisk extends UFile {
 
     @Override
     public OutputStream write() throws IOException {
-        return new FileOutputStream(file, false);
+        writeUploader = new FileOutputStream(file, true);
+        return writeUploader;
     }
 
     @Override
-    public void writeClose() {}
+    public void writeClose() {
+        if (isNull(writeUploader)) return;
+        try {
+            writeUploader.flush();
+            writeUploader.close();
+            writeUploader = null;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Override
     public OutputStream append() throws IOException {
-        return new FileOutputStream(file, true);
+        appendUploader = new FileOutputStream(file, true);
+        return appendUploader;
     }
 
     @Override
-    public void appendClose() {}
+    public void appendClose() {
+        if (isNull(appendUploader)) return;
+        try {
+            appendUploader.flush();
+            appendUploader.close();
+            appendUploader = null;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Override
     public void close() {}
@@ -252,6 +274,11 @@ public class UFileLocalDisk extends UFile {
     public UFOperationResult<Boolean> moveTo(UFile destination) {
         if (destination instanceof UFileLocalDisk) {
             return new UFOperationResult<>(this, () -> {
+                if (destination.exists().getResultOrDefault(false)) {
+                    return false;
+                }
+
+                destination.getParentUFile().mkdirs();
                 boolean result = file.renameTo(((UFileLocalDisk)destination).file);
                 if(!result) {
                     throw new RuntimeException("Unknown error occurred. Could not move '"+getPath()+"' to '"+destination.getPath()+"'");
@@ -265,8 +292,13 @@ public class UFileLocalDisk extends UFile {
 
 
     @Override
-    public UFile goTo(String path) {
+    public UFile stepInto(String path) {
         return new UFileLocalDisk(new File(file, path));
+    }
+
+    @Override
+    public UFile goTo(String path) {
+        return new UFileLocalDisk(path);
     }
 
     @Override

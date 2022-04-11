@@ -1,23 +1,19 @@
 package com.sf298.universal.file.services;
 
-import com.dropbox.core.v2.DbxClientV2;
-import com.dropbox.core.v2.files.DeleteArg;
-import com.dropbox.core.v2.files.DeleteBatchJobStatus;
-import com.dropbox.core.v2.files.DeleteBatchLaunch;
-import com.dropbox.core.v2.files.RelocationPath;
-import com.sf298.universal.file.model.functions.ThrowableFunction;
+import com.dropbox.core.DbxException;
+import com.dropbox.core.v2.files.*;
+import com.sf298.universal.file.model.functions.ExceptionNet;
 import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.function.Function.identity;
+import static com.sf298.universal.file.model.responses.UFOperationResult.createBoolOperation;
+import static com.sf298.universal.file.utils.ListUtils.zipToPairs;
+import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.*;
+import static java.util.stream.Collectors.groupingBy;
 
 class UFileDropboxBatch extends UFileBatch<UFileDropbox> {
 
@@ -26,124 +22,166 @@ class UFileDropboxBatch extends UFileBatch<UFileDropbox> {
     private UFileDropboxBatch() {}
 
     @Override
-    public UFOperationBatchResult<UFOperationResult<Boolean>> delete(List<UFileDropbox> targets) {
-        return deleteRecursive(targets);
+    public UFOperationBatchResult<Boolean> delete(List<UFileDropbox> targets) {
+        Map<UFileDropbox, UFOperationResult<Boolean>> generated = new HashMap<>();
+
+        // split targets into 'non-empty folders' and 'files or empty folders'
+        Map<Boolean, List<UFileDropbox>> grouped = targets.stream().collect(
+                groupingBy(uf -> uf.isDirectory().getResultOrDefault(false) &&
+                        (uf.listFiles().getResultOrDefault(new UFile[0]).length > 0)));
+
+        // set results for all non-empty folders to false
+        grouped.getOrDefault(true, emptyList()).forEach(uf -> generated.put(uf, createBoolOperation(uf, false)));
+
+        // process files and empty folders
+        deleteRecursive(grouped.getOrDefault(false, emptyList())).forEach(r -> generated.put((UFileDropbox) r.getActionedFile(), r));
+
+        return order(targets, generated);
     }
 
     @Override
-    public UFOperationBatchResult<UFOperationResult<Boolean>> deleteRecursive(List<UFileDropbox> targets) {
+    public UFOperationBatchResult<Boolean> deleteRecursive(List<UFileDropbox> targets) {
         System.out.println("Delete: " + targets);
-        Map<UFileDropbox, UFOperationResult<Boolean>> generated = processGroupsByToken(targets, identity(), files -> {
-            DbxClientV2 client = files.get(0).getClient();
-            List<DeleteArg> toDelete = files.stream().map(uf -> new DeleteArg(uf.getPath())).collect(toList());
-            DeleteBatchLaunch handle = client.files().deleteBatch(toDelete);
 
-            while (!client.files().deleteBatchCheck(handle.getAsyncJobIdValue()).isComplete()) {
-                try {
-                    Thread.sleep(100);
-                } catch (Exception ignored) {}
+        Map<String, List<UFileDropbox>> groupedByToken = targets.stream()
+                .collect(groupingBy(UFileDropbox::getAccessToken));
+
+        Map<UFileDropbox, UFOperationResult<Boolean>> generated = new HashMap<>();
+        groupedByToken.values().forEach(files -> {
+            List<DeleteArg> toDelete = files.stream()
+                    .map(UFile::getPath)
+                    .map(DeleteArg::new)
+                    .collect(toList());
+            DbxUserFilesRequests filesService = files.get(0).getClient().files();
+            try {
+                // start and complete job
+                String jobId = filesService.deleteBatch(toDelete).getAsyncJobIdValue();
+                DeleteBatchJobStatus status = waitForDeleteJobToComplete(() -> filesService.deleteBatchCheck(jobId));
+
+                // process results
+                List<DeleteBatchResultEntry> resultSet = status.getCompleteValue().getEntries();
+                zipToPairs(files, resultSet, (uf, res) -> generated.put(uf, createBoolOperation(uf, res.isSuccess())));
+            } catch (DbxException e) {
+                // set result as 'error' for all BatchMoves in this group
+                files.forEach(uf -> generated.put(uf, new UFOperationResult<>(uf, e)));
             }
-
-            return files.stream().collect(toMap(identity(), uf -> true));
         });
 
         return order(targets, generated);
     }
 
     @Override
-    public UFOperationBatchResult<UFOperationResult<Boolean>> moveTo(List<BatchMove> transfers) {
-        List<BatchMove> sameTokenTransfers = new ArrayList<>();
-        List<BatchMove> crossTokenTransfers = new ArrayList<>();
-        for (BatchMove transfer : transfers) {
-            if (transfer.from instanceof UFileDropbox && transfer.to instanceof UFileDropbox) {
-                UFileDropbox from = (UFileDropbox) transfer.from;
-                UFileDropbox to = (UFileDropbox) transfer.to;
-                if (from.getAccessToken().equals(to.getAccessToken())) {
-                    sameTokenTransfers.add(transfer);
-                    continue;
-                }
-            }
-            crossTokenTransfers.add(transfer);
-        }
+    public UFOperationBatchResult<Boolean> moveTo(List<BatchMove> transfers) {
+        // split into transfers for same access token vs transfers across accounts
+        Map<Integer, List<BatchMove>> groupedTransfers = groupBySameTokens(transfers);
+        List<BatchMove> crossTokenTransfers = groupedTransfers.getOrDefault(0, emptyList());
+        List<BatchMove> sameTokenTransfers = groupedTransfers.getOrDefault(1, emptyList());
 
-        Map<BatchMove, UFOperationResult<Boolean>> generated = processGroupsByToken(sameTokenTransfers, i -> (UFileDropbox)i.from, files -> {
-            DbxClientV2 client = ((UFileDropbox)files.get(0).from).getClient();
-            List<RelocationPath> toMove = files.stream()
-                    .map(bm -> new RelocationPath(bm.from.getPath(), bm.to.getPath()))
-                    .collect(toList());
-            client.files().moveBatchV2(toMove);
-            return files.stream().collect(toMap(identity(), uf -> true));
+        // process transfers same token with same token
+        Map<String, List<BatchMove>> groupedByToken = sameTokenTransfers.stream()
+                .collect(groupingBy(t -> ((UFileDropbox) t.from).getAccessToken()));
+
+        Map<BatchMove, UFOperationResult<Boolean>> generated = new HashMap<>();
+        groupedByToken.values().forEach(bms -> {
+            List<RelocationPath> relocationPaths = batchMovesToRelocationPaths(bms);
+            DbxUserFilesRequests files = batchMovesToClientFiles(bms);
+            try {
+                // start and complete job
+                String jobId = files.moveBatchV2(relocationPaths).getAsyncJobIdValue();
+                RelocationBatchV2JobStatus status = waitForRelocateJobToComplete(() -> files.moveBatchCheckV2(jobId));
+
+                // process results
+                List<RelocationBatchResultEntry> resultSet = status.getCompleteValue().getEntries();
+                zipToPairs(bms, resultSet, (bm, res) -> generated.put(bm, createBoolOperation(bm.from, res.isSuccess())));
+            } catch (DbxException e) {
+                // set result as 'error' for all BatchMoves in this group
+                bms.forEach(bm -> generated.put(bm, new UFOperationResult<>(bm.from, e)));
+            }
         });
 
-        UFOperationBatchResult<UFOperationResult<Boolean>> crossTokenResults = super.moveTo(crossTokenTransfers);
-        for (int i = 0; i < crossTokenTransfers.size(); i++) {
-            generated.put(crossTokenTransfers.get(i), crossTokenResults.get(i));
-        }
+        // use superclass to transfer across tokens
+        UFOperationBatchResult<Boolean> crossTokenResults = super.moveTo(crossTokenTransfers);
+        zipToPairs(crossTokenTransfers, crossTokenResults, generated::put);
 
         return order(transfers, generated);
     }
 
     @Override
-    public UFOperationBatchResult<UFOperationResult<Boolean>> copyTo(List<BatchMove> transfers) {
-        List<BatchMove> sameTokenTransfers = new ArrayList<>();
-        List<BatchMove> crossTokenTransfers = new ArrayList<>();
-        for (BatchMove transfer : transfers) {
-            if (transfer.from instanceof UFileDropbox && transfer.to instanceof UFileDropbox) {
-                UFileDropbox from = (UFileDropbox) transfer.from;
-                UFileDropbox to = (UFileDropbox) transfer.to;
-                if (from.getAccessToken().equals(to.getAccessToken())) {
-                    sameTokenTransfers.add(transfer);
-                    continue;
-                }
-            }
-            crossTokenTransfers.add(transfer);
-        }
+    public UFOperationBatchResult<Boolean> copyTo(List<BatchMove> transfers) {
+        // split into transfers for same access token vs transfers across accounts
+        Map<Integer, List<BatchMove>> groupedTransfers = groupBySameTokens(transfers);
+        List<BatchMove> sameTokenTransfers = groupedTransfers.getOrDefault(1, emptyList());
+        List<BatchMove> crossTokenTransfers = groupedTransfers.getOrDefault(0, emptyList());
 
-        Map<BatchMove, UFOperationResult<Boolean>> generated = processGroupsByToken(sameTokenTransfers, i -> (UFileDropbox)i.from, files -> {
-            DbxClientV2 client = ((UFileDropbox)files.get(0).from).getClient();
-            List<RelocationPath> toMove = files.stream()
-                    .map(bm -> new RelocationPath(bm.from.getPath(), bm.to.getPath()))
-                    .collect(toList());
-            client.files().copyBatchV2(toMove);
-            return files.stream().collect(toMap(identity(), uf -> true));
+        // process same token transfers
+        Map<String, List<BatchMove>> groupedByToken = sameTokenTransfers.stream()
+                .collect(groupingBy(t -> ((UFileDropbox) t.from).getAccessToken()));
+
+        Map<BatchMove, UFOperationResult<Boolean>> generated = new HashMap<>();
+        groupedByToken.values().forEach(bms -> {
+            List<RelocationPath> relocationPaths = batchMovesToRelocationPaths(bms);
+            DbxUserFilesRequests files = batchMovesToClientFiles(bms);
+            try {
+                // start and complete job
+                String jobId = files.copyBatchV2(relocationPaths).getAsyncJobIdValue();
+                RelocationBatchV2JobStatus status = waitForRelocateJobToComplete(() -> files.copyBatchCheckV2(jobId));
+
+                // process results
+                List<RelocationBatchResultEntry> resultSet = status.getCompleteValue().getEntries();
+                zipToPairs(bms, resultSet, (bm, res) -> generated.put(bm, createBoolOperation(bm.from, res.isSuccess())));
+            } catch (DbxException e) {
+                // set result as 'error' for all BatchMoves in this group
+                bms.forEach(bm -> generated.put(bm, new UFOperationResult<>(bm.from, e)));
+            }
         });
 
-        UFOperationBatchResult<UFOperationResult<Boolean>> crossTokenResults = super.moveTo(crossTokenTransfers);
-        for (int i = 0; i < crossTokenTransfers.size(); i++) {
-            generated.put(crossTokenTransfers.get(i), crossTokenResults.get(i));
-        }
+        // use superclass to transfer across tokens
+        UFOperationBatchResult<Boolean> crossTokenResults = super.copyTo(crossTokenTransfers);
+        zipToPairs(crossTokenTransfers, crossTokenResults, generated::put);
 
         return order(transfers, generated);
     }
 
-    private <I,R> Map<I, UFOperationResult<R>> processGroupsByToken(List<I> targets,
-                                                                    Function<I, UFileDropbox> toUFile,
-                                                                    ThrowableFunction<List<I>, Map<I, R>> function) {
-        Map<String, List<I>> grouped = targets.stream().collect(groupingBy(i -> toUFile.apply(i).getAccessToken()));
-        Map<I, UFOperationResult<R>> results = new HashMap<>();
-
-        for (List<I> files : grouped.values()) {
+    private Map<Integer, List<BatchMove>> groupBySameTokens(List<BatchMove> transfers) {
+        return transfers.stream()
+                .filter(t -> t.from instanceof UFileDropbox && t.to instanceof UFileDropbox)
+                .collect(groupingBy(t -> {
+                    UFileDropbox from = (UFileDropbox) t.from;
+                    UFileDropbox to = (UFileDropbox) t.to;
+                    return from.getAccessToken().equals(to.getAccessToken()) ? 1 : 0;
+                }));
+    }
+    private DbxUserFilesRequests batchMovesToClientFiles(List<BatchMove> batchMoves) {
+        return ((UFileDropbox)batchMoves.get(0).from).getClient().files();
+    }
+    private List<RelocationPath> batchMovesToRelocationPaths(Collection<BatchMove> batchMoves) {
+        return batchMoves.stream()
+                .map(bm -> new RelocationPath(bm.from.getPath(), bm.to.getPath()))
+                .collect(toList());
+    }
+    private RelocationBatchV2JobStatus waitForRelocateJobToComplete(ExceptionNet<RelocationBatchV2JobStatus, DbxException> isComplete) throws DbxException {
+        while (true) {
+            RelocationBatchV2JobStatus status = isComplete.run();
+            if (status.isComplete()) return status;
             try {
-                Map<I, R> resultsMap = function.apply(files);
-                resultsMap.entrySet().forEach(e -> results.put(
-                        e.getKey(),
-                        new UFOperationResult<>(toUFile.apply(e.getKey()), e::getValue)
-                ));
-            } catch (Exception e) {
-                files.forEach(i -> results.put(i, new UFOperationResult<>(toUFile.apply(i), e)));
-            }
+                Thread.sleep(100);
+            } catch (Exception ignored) {}
         }
-
-        return results;
+    }
+    private DeleteBatchJobStatus waitForDeleteJobToComplete(ExceptionNet<DeleteBatchJobStatus, DbxException> isComplete) throws DbxException {
+        while (true) {
+            DeleteBatchJobStatus status = isComplete.run();
+            if (status.isComplete()) return status;
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignored) {}
+        }
     }
 
-    private <I,R> UFOperationBatchResult<UFOperationResult<R>> order(List<I> ordering, Map<I, UFOperationResult<R>> map) {
+    private <I,R> UFOperationBatchResult<R> order(List<I> ordering, Map<I, UFOperationResult<R>> map) {
         return ordering.stream()
                 .map(map::get)
                 .collect(Collectors.toCollection(UFOperationBatchResult::new));
     }
 
-    private Map<String, List<UFileDropbox>> groupByToken(List<UFileDropbox> targets) {
-        return targets.stream().collect(groupingBy(UFileDropbox::getAccessToken));
-    }
 }

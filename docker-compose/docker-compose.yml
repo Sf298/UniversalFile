@@ -1,0 +1,17 @@
+version: '3.9'
+
+services:
+  universal-file-ftp:
+    container_name: universal-file-ftp
+    image: bogem/ftp:latest
+    restart: unless-stopped
+    environment:
+      FTP_USER: testuser
+      FTP_PASS: 7Jc!r
+      PASV_ADDRESS: 127.0.0.1
+    volumes:
+      - "/docker-volumes/universal-file-ftp:/home/vsftpd"
+    ports:
+      - "20:20"
+      - "21:21"
+      - "47400-47470:47400-47470"
