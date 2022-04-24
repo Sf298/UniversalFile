@@ -26,8 +26,4 @@ public class ConnectionDetails extends HashMap<ConnectionParam, String> {
         return serviceType;
     }
 
-    public UFile connect() {
-        return serviceType.construct(this);
-    }
-
 }

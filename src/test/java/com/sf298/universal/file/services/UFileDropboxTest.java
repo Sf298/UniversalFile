@@ -2,9 +2,7 @@ package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.enums.ServiceType;
 import com.sf298.universal.file.model.connection.ConnectionDetails;
-import com.sf298.universal.file.services.UFile;
-import com.sf298.universal.file.services.UFileTest;
-import com.sf298.universal.file.services.UFileDropbox;
+import com.sf298.universal.file.services.platforms.UFileDropbox;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

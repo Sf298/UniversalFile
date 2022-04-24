@@ -17,7 +17,7 @@ public abstract class UFile {
     private final String path;
     private int bufferSize;
     private boolean hasAppended = false;
-    UFMetadata metadataCache;
+    public UFMetadata metadataCache;
 
     public UFile(String path) {
         this(path, 1024);
@@ -454,7 +454,7 @@ public abstract class UFile {
         tempFile.readClose();
 
         return out;
-    };
+    }
 
     /**
      * Finishes up any operations remaining after the {@link OutputStream} returned by {@link #append()} is closed.
@@ -466,7 +466,7 @@ public abstract class UFile {
             writeClose();
             hasAppended = false;
         }
-    };
+    }
 
     /**
      * Closes the primary connection used by this {@link UFile} to the remote server.

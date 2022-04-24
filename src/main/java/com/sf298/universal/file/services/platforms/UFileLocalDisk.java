@@ -1,6 +1,7 @@
-package com.sf298.universal.file.services;
+package com.sf298.universal.file.services.platforms;
 
 import com.sf298.universal.file.model.responses.*;
+import com.sf298.universal.file.services.UFile;
 
 import java.io.*;
 import java.net.URI;

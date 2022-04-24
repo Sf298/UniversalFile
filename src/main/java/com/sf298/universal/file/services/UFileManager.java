@@ -2,15 +2,18 @@ package com.sf298.universal.file.services;
 
 import com.sf298.universal.file.model.responses.UFOperationBatchResult;
 import com.sf298.universal.file.model.responses.UFOperationResult;
+import com.sf298.universal.file.services.platforms.UFileDropbox;
+import com.sf298.universal.file.services.platforms.UFileFtp;
+import com.sf298.universal.file.services.platforms.UFileLocalDisk;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.sf298.universal.file.services.UFileDropboxBatch.DROPBOX_BATCH;
-import static com.sf298.universal.file.services.UFileFtpBatch.FTP_BATCH;
-import static com.sf298.universal.file.services.UFileLocalDiskBatch.LOCAL_DISK_BATCH;
+import static com.sf298.universal.file.services.platforms.UFileDropboxBatch.DROPBOX_BATCH;
+import static com.sf298.universal.file.services.platforms.UFileFtpBatch.FTP_BATCH;
+import static com.sf298.universal.file.services.platforms.UFileLocalDiskBatch.LOCAL_DISK_BATCH;
 
 public class UFileManager {
 

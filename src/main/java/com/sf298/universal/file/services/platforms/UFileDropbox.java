@@ -1,4 +1,4 @@
-package com.sf298.universal.file.services;
+package com.sf298.universal.file.services.platforms;
 
 import com.dropbox.core.DbxDownloader;
 import com.dropbox.core.DbxException;
@@ -11,6 +11,7 @@ import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.model.functions.ExceptionNet;
 import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
+import com.sf298.universal.file.services.UFile;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,8 +20,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.dropbox.core.v2.files.WriteMode.OVERWRITE;
-import static com.sf298.universal.file.model.connection.ConnectionParam.*;
-import static com.sf298.universal.file.services.UFileDropboxBatch.DROPBOX_BATCH;
+import static com.sf298.universal.file.model.connection.ConnectionParam.TOKEN;
+import static com.sf298.universal.file.services.platforms.UFileDropboxBatch.DROPBOX_BATCH;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 

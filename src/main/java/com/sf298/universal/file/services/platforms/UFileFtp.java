@@ -1,7 +1,8 @@
-package com.sf298.universal.file.services;
+package com.sf298.universal.file.services.platforms;
 
 import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.model.responses.*;
+import com.sf298.universal.file.services.UFile;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPClientConfig;

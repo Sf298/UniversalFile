@@ -1,10 +1,12 @@
-package com.sf298.universal.file.services;
+package com.sf298.universal.file.services.platforms;
 
 import com.dropbox.core.DbxException;
 import com.dropbox.core.v2.files.*;
 import com.sf298.universal.file.model.functions.ExceptionNet;
 import com.sf298.universal.file.model.inputs.BatchMove;
 import com.sf298.universal.file.model.responses.*;
+import com.sf298.universal.file.services.UFile;
+import com.sf298.universal.file.services.UFileBatch;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -15,7 +17,7 @@ import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.*;
 import static java.util.stream.Collectors.groupingBy;
 
-class UFileDropboxBatch extends UFileBatch<UFileDropbox> {
+public class UFileDropboxBatch extends UFileBatch<UFileDropbox> {
 
     public static UFileDropboxBatch DROPBOX_BATCH = new UFileDropboxBatch();
 
