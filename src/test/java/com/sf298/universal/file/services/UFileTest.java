@@ -81,8 +81,8 @@ public abstract class UFileTest {
 
     @Test
     public void testGetParent() {
-        assertThat(uFolder111.getParent()).isEqualTo(UFile.join(root.getPath(), folder11, root.getFileSep()));
-        assertThat(uFile11.getParent()).isEqualTo(UFile.join(root.getPath(), folder11, root.getFileSep()));
+        assertThat(uFolder111.getParent()).isEqualTo(UFile.join(root.getFileSep(), root.getPath(), folder11));
+        assertThat(uFile11.getParent()).isEqualTo(UFile.join(root.getFileSep(), root.getPath(), folder11));
         assertThat(uFile1.getParent()).isEqualTo(root.getPath());
 
         UFile f = root;
@@ -105,7 +105,7 @@ public abstract class UFileTest {
 
     @Test
     public void testGetPath() {
-        String expected = UFile.join(root.getPath(), file1, root.getFileSep());
+        String expected = UFile.join(root.getFileSep(), root.getPath(), file1);
         assertThat(uFile1.getPath()).isEqualTo(expected);
     }
 
@@ -314,13 +314,13 @@ public abstract class UFileTest {
 
     @Test
     public void testJoin() {
-        assertThat(UFile.join("/a/b/c", "d", "/")).isEqualTo("/a/b/c/d");
-        assertThat(UFile.join("/a/b/c/", "d", "/")).isEqualTo("/a/b/c/d");
-        assertThat(UFile.join("/a/b/c", "/d", "/")).isEqualTo("/a/b/c/d");
-        assertThat(UFile.join("/a/b/c/", "/d", "/")).isEqualTo("/a/b/c/d");
+        assertThat(UFile.join("/", "/a/b/c", "d")).isEqualTo("/a/b/c/d");
+        assertThat(UFile.join("/", "/a/b/c/", "d")).isEqualTo("/a/b/c/d");
+        assertThat(UFile.join("/", "/a/b/c", "/d")).isEqualTo("/a/b/c/d");
+        assertThat(UFile.join("/", "/a/b/c/", "/d")).isEqualTo("/a/b/c/d");
 
-        assertThat(UFile.join("/a/b/c/", "../d", "/")).isEqualTo("/a/b/d");
-        assertThat(UFile.join("/a/b/c/", "../../d", "/")).isEqualTo("/a/d");
+        assertThat(UFile.join("/", "/a/b/c/", "../d")).isEqualTo("/a/b/d");
+        assertThat(UFile.join("/", "/a/b/c/", "../../d")).isEqualTo("/a/d");
     }
 
 }

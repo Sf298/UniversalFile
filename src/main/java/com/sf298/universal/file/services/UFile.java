@@ -7,6 +7,7 @@ import com.sf298.universal.file.model.responses.*;
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
@@ -370,6 +371,18 @@ public abstract class UFile {
         );
     }
 
+    /**
+     * List all files recursively in batches.
+     */
+    public UFOperationResult<Boolean> listFilesRecursiveBatch(Consumer<UFile[]> resultCallback) {
+        UFOperationResult<UFile[]> files = listFiles();
+        if (files.isSuccessful()) {
+            resultCallback.accept(files.getResult());
+            return UFOperationResult.createBoolOperation(this, true);
+        }
+        return new UFOperationResult<>(this, files.getException());
+    }
+
 
     /**
      * Creates the directory named by this abstract pathname.
@@ -574,7 +587,7 @@ public abstract class UFile {
      * @param fileSep The file separator. Usually <code>/</code> or <code>\</code>
      * @return Returns the combined pathname.
      */
-    public static String join(String parent, String child, String fileSep) {
+    public static String join(String fileSep, String parent, String child) {
         while (true) {
             if (child.startsWith("../") || child.startsWith("..\\")) {
                 child = child.substring(3);

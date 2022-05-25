@@ -4,9 +4,9 @@ import com.dropbox.core.DbxDownloader;
 import com.dropbox.core.DbxException;
 import com.dropbox.core.DbxRequestConfig;
 import com.dropbox.core.RateLimitException;
+import com.dropbox.core.oauth.DbxCredential;
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.*;
-import com.sf298.universal.file.enums.ServiceType;
 import com.sf298.universal.file.model.connection.ConnectionDetails;
 import com.sf298.universal.file.model.functions.ExceptionNet;
 import com.sf298.universal.file.model.inputs.BatchMove;
@@ -18,6 +18,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static com.dropbox.core.v2.files.WriteMode.OVERWRITE;
 import static com.sf298.universal.file.model.connection.ConnectionParam.TOKEN;
@@ -30,11 +31,41 @@ public class UFileDropbox extends UFile {
     /**
      * The cache of clients {@link DbxClientV2}. Reduces overhead of new connections.
      */
-    private static final Map<String, DbxClientV2> clients = new ConcurrentHashMap<>();
+    private static final Map<DbxCredential, DbxClientV2> clients = new ConcurrentHashMap<>();
 
-    private final String accessToken;
+    private final DbxCredential credential;
     private DbxDownloader<FileMetadata> readDownloader;
+    private DbxDownloader<FileMetadata> readThumbnailDownloader;
     private UploadUploader writeUploader;
+
+    public UFileDropbox(DbxCredential credential, String path) {
+        super(path = path.toLowerCase());
+        if (!getPath().startsWith("/")) {
+            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should start with '/'.");
+        }
+
+        this.credential = credential;
+        DbxRequestConfig config = DbxRequestConfig.newBuilder("photo-trove local").build();
+        try {
+            credential.refresh(config);
+        } catch (DbxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    public UFileDropbox(String dropboxAppKey, String dropboxAppSecret, String refreshToken, String path) {
+        super(path = path.toLowerCase());
+        if (!getPath().startsWith("/")) {
+            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should start with '/'.");
+        }
+
+        credential = new DbxCredential("", 0L, refreshToken, dropboxAppKey, dropboxAppSecret);
+        DbxRequestConfig config = DbxRequestConfig.newBuilder("photo-trove local").build();
+        try {
+            credential.refresh(config);
+        } catch (DbxException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     /**
      * Creates a new {@link UFile} located at "/".
@@ -54,11 +85,7 @@ public class UFileDropbox extends UFile {
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
     public UFileDropbox(ConnectionDetails login, String path) {
-        super(path = path.toLowerCase());
-        if (!getPath().startsWith("/")) {
-            throw new IllegalArgumentException("Error: '"+ path +"' doesn't have a valid beginning. Should start with '/'.");
-        }
-        accessToken = login.get(TOKEN);
+        this(new DbxCredential(login.get(TOKEN)), path);
     }
 
     /**
@@ -67,24 +94,24 @@ public class UFileDropbox extends UFile {
      * @param path The path of the {@link UFile} object to create. May not exist on the remote server.
      */
     private UFileDropbox(UFileDropbox uFile, String path) {
-        this(new ConnectionDetails(ServiceType.DROPBOX, Map.of(TOKEN, uFile.accessToken)), path);
+        this(uFile.credential, path);
     }
-    private UFileDropbox(String accessToken, Metadata metadata) {
+    private UFileDropbox(DbxCredential credential, Metadata metadata) {
         super(metadata.getPathLower());
-        this.accessToken = accessToken;
+        this.credential = credential;
         metadataCache = metadataToUFMetadata(metadata);
     }
 
     public String getAccessToken() {
-        return accessToken;
+        return credential.getAccessToken();
     }
 
     public DbxClientV2 getClient() {
-        DbxClientV2 client = clients.get(accessToken);
+        DbxClientV2 client = clients.get(credential);
         if (isNull(client)) {
             DbxRequestConfig config = DbxRequestConfig.newBuilder("UFile/testing").build();
-            client = new DbxClientV2(config, accessToken);
-            clients.put(accessToken, client);
+            client = new DbxClientV2(config, credential);
+            clients.put(credential, client);
         }
         return client;
     }
@@ -179,9 +206,46 @@ public class UFileDropbox extends UFile {
     @Override
     public UFOperationResult<UFile[]> listFiles() {
         return new UFOperationResult<>(this, () -> {
-            ListFolderResult returned = callApi(5, () -> getClient().files().listFolder(getDropboxPath()));
-            return returned.getEntries().stream().map(m -> new UFileDropbox(accessToken, m)).toArray(UFile[]::new);
+            List<ListFolderResult> folderResults = new ArrayList<>();
+            folderResults.add(callApi(5, () -> getClient().files().listFolder(getDropboxPath())));
+            while (folderResults.get(folderResults.size()-1).getHasMore()) {
+                ListFolderResult lastResult = folderResults.get(folderResults.size()-1);
+                folderResults.add(callApi(5, () -> getClient().files().listFolderContinue(lastResult.getCursor())));
+            }
+            return folderResults.stream()
+                    .flatMap(r -> r.getEntries().stream())
+                    .map(m -> new UFileDropbox(credential, m))
+                    .toArray(UFile[]::new);
         });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> listFilesRecursiveBatch(Consumer<UFile[]> resultCallback) {
+        UFOperationResult<ListFolderResult> r = new UFOperationResult<>(this, () -> callApi(5, () -> {
+            ListFolderBuilder listFolderBuilder = getClient().files().listFolderBuilder(getDropboxPath());
+            return listFolderBuilder.withRecursive(true).start();
+        }));
+        if (!r.isSuccessful()) {
+            return new UFOperationResult<>(this, r.getException());
+        }
+        resultCallback.accept(r.getResult().getEntries().stream()
+                .map(m -> new UFileDropbox(credential, m))
+                .toArray(UFile[]::new));
+
+
+        while (r.getResult().getHasMore()) {
+            final ListFolderResult returnedFinal = r.getResult();
+            r = new UFOperationResult<>(this, () -> callApi(5, () ->
+                getClient().files().listFolderContinue(returnedFinal.getCursor())
+            ));
+            if (!r.isSuccessful()) {
+                return new UFOperationResult<>(this, r.getException());
+            }
+            resultCallback.accept(r.getResult().getEntries().stream()
+                    .map(m -> new UFileDropbox(credential, m))
+                    .toArray(UFile[]::new));
+        }
+        return UFOperationResult.createBoolOperation(this, true);
     }
 
     @Override
@@ -229,6 +293,25 @@ public class UFileDropbox extends UFile {
         if (isNull(readDownloader)) return;
         readDownloader.close();
         readDownloader = null;
+    }
+
+    public InputStream readThumbnail() throws IOException {
+        try {
+            readThumbnailDownloader = getClient().files().getThumbnailBuilder(getDropboxPath())
+                    .withSize(ThumbnailSize.W256H256)
+                    .withMode(ThumbnailMode.FITONE_BESTFIT)
+                    .withFormat(ThumbnailFormat.JPEG)
+                    .start();
+            return readThumbnailDownloader.getInputStream();
+        } catch (DbxException e) {
+            throw new IOException(e);
+        }
+    }
+
+    public void readThumbnailClose() {
+        if (isNull(readThumbnailDownloader)) return;
+        readThumbnailDownloader.close();
+        readThumbnailDownloader = null;
     }
 
     @Override
@@ -308,7 +391,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public UFile stepInto(String path) {
-        return new UFileDropbox(this, join(getPath(), path, getFileSep()));
+        return new UFileDropbox(this, join(getFileSep(), getPath(), path));
     }
 
     @Override
@@ -331,7 +414,7 @@ public class UFileDropbox extends UFile {
 
     @Override
     public int hashCode() {
-        return Objects.hash(getPath(), accessToken);
+        return Objects.hash(getPath(), credential);
     }
 
 

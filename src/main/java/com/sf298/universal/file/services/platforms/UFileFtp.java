@@ -265,7 +265,7 @@ public class UFileFtp extends UFile {
 
     @Override
     public UFile stepInto(String path) {
-        return new UFileFtp(this, join(getPath(), path, getFileSep()));
+        return new UFileFtp(this, join(getFileSep(), getPath(), path));
     }
 
     @Override
