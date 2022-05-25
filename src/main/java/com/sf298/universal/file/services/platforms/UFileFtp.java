@@ -286,8 +286,7 @@ public class UFileFtp extends UFile {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof UFileFtp)) return false;
-        UFileFtp uFileFtp = (UFileFtp) o;
+        if (!(o instanceof UFileFtp uFileFtp)) return false;
         return getPath().equals(uFileFtp.getPath()) &&
                 login.equals(uFileFtp.login);
     }

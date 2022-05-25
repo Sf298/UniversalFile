@@ -407,9 +407,8 @@ public class UFileDropbox extends UFile {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof UFileDropbox)) return false;
-        UFileDropbox uFile = (UFileDropbox) o;
-        return getPath().equals(uFile.getPath()) && accessToken.equals(uFile.accessToken);
+        if (!(o instanceof UFileDropbox uFile)) return false;
+        return getPath().equals(uFile.getPath()) && credential.equals(uFile.credential);
     }
 
     @Override
