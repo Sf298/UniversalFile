@@ -163,6 +163,16 @@ public class UFileDropbox extends UFile {
     }
 
     @Override
+    public UFOperationResult<Date> dateCreated() {
+        return new UFOperationResult<>(this, new UnsupportedOperationException());
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setDateCreated(Date time) {
+        return new UFOperationResult<>(this, new UnsupportedOperationException());
+    }
+
+    @Override
     public UFOperationResult<Date> lastModified() {
         return new UFOperationResult<>(this, () -> {
             populateMetadataCache();
@@ -171,6 +181,11 @@ public class UFileDropbox extends UFile {
             }
             return null;
         });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return UFOperationResult.createBoolOperation(this, false);
     }
 
     @Override
@@ -272,11 +287,6 @@ public class UFileDropbox extends UFile {
         });
     }
 
-    @Override
-    public UFOperationResult<Boolean> setLastModified(Date time) {
-        return UFOperationResult.createBoolOperation(this, false);
-    }
-
 
     @Override
     public InputStream read() throws IOException {
@@ -284,7 +294,7 @@ public class UFileDropbox extends UFile {
             readDownloader = getClient().files().download(getDropboxPath());
             return readDownloader.getInputStream();
         } catch (DbxException e) {
-            throw new IOException(e);
+            throw new IOException("Error reading "+this, e);
         }
     }
 
@@ -304,7 +314,7 @@ public class UFileDropbox extends UFile {
                     .start();
             return readThumbnailDownloader.getInputStream();
         } catch (DbxException e) {
-            throw new IOException(e);
+            throw new IOException("Error reading "+this, e);
         }
     }
 
@@ -320,7 +330,7 @@ public class UFileDropbox extends UFile {
             writeUploader = getClient().files().uploadBuilder(getDropboxPath()).withMode(OVERWRITE).start();
             return writeUploader.getOutputStream();
         } catch (DbxException e) {
-            throw new IOException(e);
+            throw new IOException("Error writing "+this, e);
         }
     }
 
@@ -335,7 +345,7 @@ public class UFileDropbox extends UFile {
             writeUploader = null;
         } catch (DbxException | IOException e) {
             writeUploader = null;
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error closing write "+this, e);
         }
     }
 /*

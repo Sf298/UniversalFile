@@ -104,8 +104,24 @@ public class UFileFtp extends UFile {
     }
 
     @Override
+    public UFOperationResult<Date> dateCreated() {
+        return new UFOperationResult<>(this, new UnsupportedOperationException());
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setDateCreated(Date time) {
+        return new UFOperationResult<>(this, new UnsupportedOperationException());
+    }
+
+    @Override
     public UFOperationResult<Date> lastModified() {
         return new UFOperationResult<>(this, () -> timeValFormat.parse(getClient().getModificationTime(getPath())));
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return new UFOperationResult<>(this,
+                () -> getClient().setModificationTime(getPath(), timeValFormat.format(time)));
     }
 
     @Override
@@ -177,12 +193,6 @@ public class UFileFtp extends UFile {
             }
             return getClient().makeDirectory(getPath());
         });
-    }
-
-    @Override
-    public UFOperationResult<Boolean> setLastModified(Date time) {
-        return new UFOperationResult<>(this,
-                () -> getClient().setModificationTime(getPath(), timeValFormat.format(time)));
     }
 
 

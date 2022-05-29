@@ -5,6 +5,10 @@ import com.sf298.universal.file.services.UFile;
 
 import java.io.*;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Objects;
@@ -165,8 +169,31 @@ public class UFileLocalDisk extends UFile {
     }
 
     @Override
+    public UFOperationResult<Date> dateCreated() {
+        return new UFOperationResult<>(this, () -> {
+            BasicFileAttributes attr = Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+            return new Date(attr.creationTime().toMillis());
+        });
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setDateCreated(Date time) {
+        return new UFOperationResult<>(this, () -> {
+            BasicFileAttributeView attributes = Files.getFileAttributeView(file.toPath(), BasicFileAttributeView.class);
+            BasicFileAttributes attr = attributes.readAttributes();
+            attributes.setTimes(attr.lastModifiedTime(), attr.lastAccessTime(), FileTime.fromMillis(time.getTime()));
+            return true;
+        });
+    }
+
+    @Override
     public UFOperationResult<Date> lastModified() {
         return new UFOperationResult<>(this, () -> new Date(file.lastModified()));
+    }
+
+    @Override
+    public UFOperationResult<Boolean> setLastModified(Date time) {
+        return new UFOperationResult<>(this, () -> file.setLastModified(time.getTime()));
     }
 
     @Override
@@ -217,11 +244,6 @@ public class UFileLocalDisk extends UFile {
     @Override
     public UFOperationResult<Boolean> mkdirs() {
         return new UFOperationResult<>(this, file::mkdirs);
-    }
-
-    @Override
-    public UFOperationResult<Boolean> setLastModified(Date time) {
-        return new UFOperationResult<>(this, () -> file.setLastModified(time.getTime()));
     }
 
     @Override

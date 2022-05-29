@@ -106,6 +106,31 @@ public abstract class UFile {
     public abstract UFOperationResult<Boolean> isFile();
 
     /**
+     * Gets the datetime that this file was created.
+     * @return A {@link Date} object denoting the date and time this file was created.
+     */
+    public abstract UFOperationResult<Date> dateCreated();
+
+    /**
+     * Sets the created datetime of the file or directory named by this
+     * abstract pathname.
+     *
+     * @param  time  The new created datetime, measured in milliseconds since
+     *               the epoch (00:00:00 GMT, January 1, 1970)
+     *
+     * @return {@code true} if and only if the operation succeeded;
+     *          {@code false} otherwise
+     *
+     * @throws  IllegalArgumentException  If the argument is negative
+     *
+     * @throws  SecurityException
+     *          If a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkWrite(java.lang.String)}
+     *          method denies write access to the named file
+     */
+    public abstract UFOperationResult<Boolean> setDateCreated(Date time);
+
+    /**
      * Gets the datetime that this file was last modified.
      * @return A {@link Date} object denoting the date and time this file was last modified.
      */
