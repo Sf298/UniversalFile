@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static java.util.Arrays.asList;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
@@ -358,8 +359,8 @@ public abstract class UFile {
     public UFOperationResult<UFile[]> listFiles(UFilenameFilter filter) {
         return new UFOperationResult<>(this,
                 () -> Arrays.stream(listFiles().getResult())
-                .filter(f -> filter.accept(this, f.getName()))
-                .toArray(UFile[]::new)
+                        .filter(f -> filter.accept(this, f.getName()))
+                        .toArray(UFile[]::new)
         );
     }
 
@@ -391,9 +392,22 @@ public abstract class UFile {
     public UFOperationResult<UFile[]> listFiles(UFileFilter filter) {
         return new UFOperationResult<>(this,
                 () -> Arrays.stream(listFiles().getResult())
-                    .filter(filter::accept)
-                    .toArray(UFile[]::new)
+                        .filter(filter::accept)
+                        .toArray(UFile[]::new)
         );
+    }
+
+    /**
+     * List all files recursively.
+     */
+    public UFOperationResult<UFile[]> listFilesRecursive() {
+        ArrayList<UFile> out = new ArrayList<>();
+        UFOperationResult<Boolean> result = listFilesRecursiveBatch(batch -> out.addAll(asList(batch)));
+        if (!result.isSuccessful()) {
+            return new UFOperationResult<>(this, result.getException());
+        }
+
+        return new UFOperationResult<>(this, () -> out.toArray(UFile[]::new));
     }
 
     /**
@@ -526,21 +540,21 @@ public abstract class UFile {
         }
 
         return new UFOperationResult<>(this, () -> {
-                InputStream in = new BufferedInputStream(this.read());
-                OutputStream out = new BufferedOutputStream(destination.write());
+            InputStream in = new BufferedInputStream(this.read());
+            OutputStream out = new BufferedOutputStream(destination.write());
 
-                byte[] buffer = new byte[getBufferSize()];
-                int lengthRead;
-                while ((lengthRead = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, lengthRead);
-                }
-                this.close();
-                readClose();
-                out.flush();
-                out.close();
-                destination.writeClose();
+            byte[] buffer = new byte[getBufferSize()];
+            int lengthRead;
+            while ((lengthRead = in.read(buffer)) > 0) {
+                out.write(buffer, 0, lengthRead);
+            }
+            this.close();
+            readClose();
+            out.flush();
+            out.close();
+            destination.writeClose();
 
-                return true;
+            return true;
         });
     }
 
